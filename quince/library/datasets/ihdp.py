@@ -87,7 +87,7 @@ class IHDP(data.Dataset):
         self.y_std = df_train["y"].std()
         covars = _CONTINUOUS_COVARIATES + _BINARY_COVARIATES
         covars = covars + _HIDDEN_COVARIATE if not hidden_confounding else covars
-        self.dim_input = len(covars)
+        self.dim_input = len(covars) + 1
         self.dim_output = 1
         if self.split == "test":
             self.x = df_test[covars].to_numpy(dtype="float32")
@@ -125,6 +125,6 @@ class IHDP(data.Dataset):
         return len(self.x)
 
     def __getitem__(self, idx):
-        inputs = torch.from_numpy(self.x[idx]).float()
+        inputs = torch.from_numpy(np.hstack([self.x[idx], self.t[idx]])).float()
         targets = torch.from_numpy((self.y[idx] - self.y_mean) / self.y_std).float()
         return inputs, targets
