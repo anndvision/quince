@@ -1,6 +1,11 @@
 import ray
 import click
+
 from torch import cuda
+
+from pathlib import Path
+
+from quince.library import datasets
 
 
 @click.group(chain=True)
@@ -60,6 +65,57 @@ def train(
             "cpu_per_trial": cpu_per_trial,
             "verbose": verbose,
             "seed": seed,
+        }
+    )
+
+
+@cli.command("ihdp")
+@click.pass_context
+@click.option(
+    "--root",
+    type=str,
+    required=True,
+    help="location of dataset",
+)
+@click.option(
+    "--hidden-confounding",
+    default=True,
+    type=bool,
+    help="Censor hidden confounder, default=True",
+)
+def ihdp(
+    context,
+    root,
+    hidden_confounding,
+):
+    job_dir = Path(context.obj.get("job_dir"))
+    dataset_name = "ihdp"
+    experiment_dir = job_dir / dataset_name / f"hc-{hidden_confounding}"
+    context.obj.update(
+        {
+            "dataset_name": dataset_name,
+            "experiment_dir": str(experiment_dir),
+            "ds_train": {
+                "root": root,
+                "split": "train",
+                "mode": "mu",
+                "hidden_confounding": hidden_confounding,
+                "seed": context.obj.get("seed"),
+            },
+            "ds_valid": {
+                "root": root,
+                "split": "valid",
+                "mode": "mu",
+                "hidden_confounding": hidden_confounding,
+                "seed": context.obj.get("seed"),
+            },
+            "ds_test": {
+                "root": root,
+                "split": "test",
+                "mode": "mu",
+                "hidden_confounding": hidden_confounding,
+                "seed": context.obj.get("seed"),
+            },
         }
     )
 
