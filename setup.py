@@ -11,8 +11,9 @@ setup(
     license="Apache-2.0",
     packages=find_packages(),
     install_requires=[
-        "ray>=1.2.0",
         "black",
+        "pyreadr",
+        "ray>=1.2.0",
         "click>=7.1.2",
         "torch>=1.7.1",
         "numpy>=1.20.1",
