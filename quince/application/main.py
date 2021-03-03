@@ -240,7 +240,7 @@ def density_network(
             num_workers=8,
             seed=config.get("seed"),
         )
-        # _ = outcome_model.fit(ds_train, ds_valid)
+        _ = outcome_model.fit(ds_train, ds_valid)
 
         ds_train_config = config.get("ds_train")
         ds_train_config["mode"] = "pi"
@@ -248,7 +248,7 @@ def density_network(
         ds_valid_config = config.get("ds_valid")
         ds_valid_config["mode"] = "pi"
         ds_valid = datasets.DATASETS.get(dataset_name)(**ds_valid_config)
-        
+
         out_dir = experiment_dir / "checkpoints" / "pi"
         propensity_model = models.CategoricalDensityNetwork(
             job_dir=out_dir,
