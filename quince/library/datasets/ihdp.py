@@ -81,13 +81,23 @@ class IHDP(data.Dataset):
         df_train, df_test = model_selection.train_test_split(
             df, test_size=0.1, random_state=seed
         )
+        self.mode = mode
         self.split = split
         # Set x, y, and t values
-        self.y_mean = df_train["y"].mean()
-        self.y_std = df_train["y"].std()
+        self.y_mean = (
+            df_train["y"].to_numpy(dtype="float32").mean(keepdims=True)
+            if mode == "mu"
+            else np.asarray([0.0], dtype="float32")
+        )
+        self.y_std = (
+            df_train["y"].to_numpy(dtype="float32").std(keepdims=True)
+            if mode == "mu"
+            else np.asarray([1.0], dtype="float32")
+        )
         covars = _CONTINUOUS_COVARIATES + _BINARY_COVARIATES
         covars = covars + _HIDDEN_COVARIATE if not hidden_confounding else covars
-        self.dim_input = len(covars) + 1
+        self.dim_input = len(covars)
+        self.dim_treatment = 1
         self.dim_output = 1
         if self.split == "test":
             self.x = df_test[covars].to_numpy(dtype="float32")
@@ -125,6 +135,10 @@ class IHDP(data.Dataset):
         return len(self.x)
 
     def __getitem__(self, idx):
-        inputs = torch.from_numpy(np.hstack([self.x[idx], self.t[idx]])).float()
+        inputs = (
+            torch.from_numpy(self.x[idx]).float()
+            if self.mode == "pi"
+            else torch.from_numpy(np.hstack([self.x[idx], self.t[idx]])).float()
+        )
         targets = torch.from_numpy((self.y[idx] - self.y_mean) / self.y_std).float()
         return inputs, targets
