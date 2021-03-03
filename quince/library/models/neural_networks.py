@@ -95,7 +95,6 @@ class _NeuralNetwork(core.PyTorchModel):
         print("Metrics Epoch", engine.state.epoch)
         justify = max(len(k) for k in train_metrics) + 2
         for k, v in train_metrics.items():
-            # v = v.item()
             if type(v) == float:
                 print("train {:<{justify}} {:<5f}".format(k, v, justify=justify))
                 continue
@@ -104,7 +103,6 @@ class _NeuralNetwork(core.PyTorchModel):
         tune_metrics = self.evaluator.state.metrics
         justify = max(len(k) for k in tune_metrics) + 2
         for k, v in tune_metrics.items():
-            # v = v.item()
             if type(v) == float:
                 print("tune {:<{justify}} {:<5f}".format(k, v, justify=justify))
                 continue
@@ -126,7 +124,6 @@ class _NeuralNetwork(core.PyTorchModel):
         print("Metrics Epoch", engine.state.epoch)
         justify = max(len(k) for k in metric_values) + 2
         for k, v in metric_values.items():
-            # v = v.item()
             if type(v) == float:
                 print("best {:<{justify}} {:<5f}".format(k, v, justify=justify))
                 continue
