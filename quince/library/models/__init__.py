@@ -1,0 +1,2 @@
+from quince.library.models.neural_networks import CategoricalDensityNetwork
+from quince.library.models.neural_networks import GaussianMixtureDensityNetwork

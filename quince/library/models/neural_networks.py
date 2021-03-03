@@ -1,5 +1,3 @@
-import torch
-
 from torch import nn
 from torch import optim
 
@@ -17,6 +15,7 @@ class _NeuralNetwork(core.PyTorchModel):
         job_dir,
         architecture,
         dim_input,
+        dim_treatment,
         dim_hidden,
         depth,
         negative_slope,
@@ -38,16 +37,29 @@ class _NeuralNetwork(core.PyTorchModel):
             seed=seed,
             num_workers=num_workers,
         )
-        self.encoder = dense.TARNet(
-            architecture=architecture,
-            dim_input=dim_input,
-            dim_hidden=dim_hidden,
-            num_treatments=1,
-            depth=depth,
-            negative_slope=negative_slope,
-            batch_norm=batch_norm,
-            dropout_rate=dropout_rate,
-            spectral_norm=spectral_norm,
+        self.encoder = (
+            dense.TARNet(
+                architecture=architecture,
+                dim_input=dim_input,
+                dim_hidden=dim_hidden,
+                dim_treatment=dim_treatment,
+                depth=depth,
+                negative_slope=negative_slope,
+                batch_norm=batch_norm,
+                dropout_rate=dropout_rate,
+                spectral_norm=spectral_norm,
+            )
+            if dim_treatment > 0
+            else dense.NeuralNetwork(
+                architecture=architecture,
+                dim_input=dim_input,
+                dim_hidden=dim_hidden,
+                depth=depth,
+                negative_slope=negative_slope,
+                batch_norm=batch_norm,
+                dropout_rate=dropout_rate,
+                spectral_norm=spectral_norm,
+            )
         )
         self.metrics = {
             "loss": metrics.Average(
@@ -127,6 +139,7 @@ class CategoricalDensityNetwork(_NeuralNetwork):
         job_dir,
         architecture,
         dim_input,
+        dim_treatment,
         dim_output,
         dim_hidden,
         depth,
@@ -146,6 +159,7 @@ class CategoricalDensityNetwork(_NeuralNetwork):
             job_dir=job_dir,
             architecture=architecture,
             dim_input=dim_input,
+            dim_treatment=dim_treatment,
             dim_hidden=dim_hidden,
             depth=depth,
             negative_slope=negative_slope,
@@ -180,6 +194,7 @@ class GaussainDensityNetwork(_NeuralNetwork):
         job_dir,
         architecture,
         dim_input,
+        dim_treatment,
         dim_output,
         dim_hidden,
         depth,
@@ -199,6 +214,7 @@ class GaussainDensityNetwork(_NeuralNetwork):
             job_dir=job_dir,
             architecture=architecture,
             dim_input=dim_input,
+            dim_treatment=dim_treatment,
             dim_hidden=dim_hidden,
             depth=depth,
             negative_slope=negative_slope,
@@ -233,6 +249,7 @@ class GaussianMixtureDensityNetwork(_NeuralNetwork):
         job_dir,
         architecture,
         dim_input,
+        dim_treatment,
         dim_output,
         dim_hidden,
         depth,
@@ -252,6 +269,7 @@ class GaussianMixtureDensityNetwork(_NeuralNetwork):
             job_dir=job_dir,
             architecture=architecture,
             dim_input=dim_input,
+            dim_treatment=dim_treatment,
             dim_hidden=dim_hidden,
             depth=depth,
             negative_slope=negative_slope,

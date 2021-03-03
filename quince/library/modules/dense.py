@@ -251,7 +251,7 @@ class TARNet(nn.Module):
         architecture,
         dim_input,
         dim_hidden,
-        num_treatments,
+        dim_treatment,
         depth,
         negative_slope,
         batch_norm,
@@ -271,7 +271,7 @@ class TARNet(nn.Module):
         )
         self.t_encoder = NeuralNetwork(
             architecture=architecture,
-            dim_input=dim_hidden + num_treatments,
+            dim_input=dim_hidden + dim_treatment,
             dim_hidden=dim_hidden,
             depth=2,
             negative_slope=negative_slope,
@@ -279,6 +279,7 @@ class TARNet(nn.Module):
             dropout_rate=dropout_rate,
             spectral_norm=spectral_norm,
         )
+        self.dim_output = self.t_encoder.dim_output
 
     def forward(self, inputs):
         phi = self.encoder(inputs[:, :-1])
