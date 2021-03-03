@@ -1,0 +1,1 @@
+from quince.application.workflows.training import density_network_trainer
