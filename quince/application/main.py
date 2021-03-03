@@ -1,13 +1,11 @@
 import ray
-import json
 import click
 
 from torch import cuda
 
 from pathlib import Path
 
-from quince.library import datasets
-from quince.library import models
+from quince.application import workflows
 
 
 @click.group(chain=True)
@@ -158,10 +156,10 @@ def ihdp(
     "--epochs", type=int, default=500, help="number of training epochs, default=50"
 )
 @click.option(
-    "--mc-samples",
+    "--ensemble-size",
     type=int,
-    default=50,
-    help="number of samples from model posterior, default=50",
+    default=1,
+    help="number of models in ensemble, default=1",
 )
 def density_network(
     context,
@@ -174,7 +172,7 @@ def density_network(
     learning_rate,
     batch_size,
     epochs,
-    mc_samples,
+    ensemble_size,
 ):
     context.obj.update(
         {
@@ -187,7 +185,7 @@ def density_network(
             "learning_rate": learning_rate,
             "batch_size": batch_size,
             "epochs": epochs,
-            "mc_samples": mc_samples,
+            "ensemble_size": ensemble_size,
         }
     )
 
@@ -195,93 +193,21 @@ def density_network(
         num_gpus=context.obj.get("gpu_per_trial"),
         num_cpus=context.obj.get("cpu_per_trial"),
     )
-    def trainer(
-        config,
-        experiment_dir,
-        trial,
-    ):
-        dataset_name = config.get("dataset_name")
-        config["ds_train"]["seed"] = trial
-        config["ds_valid"]["seed"] = trial + 1 if dataset_name == "synthetic" else trial
-        config["ds_test"]["seed"] = trial + 2 if dataset_name == "synthetic" else trial
-
-        experiment_dir = (
-            Path(experiment_dir)
-            / "density-network"
-            / f"dh-{dim_hidden}_nc-{num_components}_dp-{depth}_ns-{negative_slope}_dr-{dropout_rate}_sn-{spectral_norm}_lr-{learning_rate}_bs-{batch_size}_ep-{epochs}"
-            / f"{trial:03d}"
-        )
-        experiment_dir.mkdir(parents=True, exist_ok=True)
-        config_path = experiment_dir / "config.json"
-        with config_path.open(mode="w") as cp:
-            json.dump(config, cp)
-
-        ds_train = datasets.DATASETS.get(dataset_name)(**config.get("ds_train"))
-        ds_valid = datasets.DATASETS.get(dataset_name)(**config.get("ds_valid"))
-
-        out_dir = experiment_dir / "checkpoints" / "mu"
-        outcome_model = models.GaussianMixtureDensityNetwork(
-            job_dir=out_dir,
-            architecture="resnet",
-            dim_input=ds_train.dim_input,
-            dim_treatment=ds_train.dim_treatment,
-            dim_hidden=config.get("dim_hidden"),
-            dim_output=config.get("num_components"),
-            depth=config.get("depth"),
-            negative_slope=config.get("negative_slope"),
-            batch_norm=False,
-            spectral_norm=config.get("spectral_norm"),
-            dropout_rate=config.get("dropout_rate"),
-            weight_decay=(0.5 * (1 - config.get("dropout_rate"))) / len(ds_train),
-            learning_rate=config.get("learning_rate"),
-            batch_size=config.get("batch_size"),
-            epochs=config.get("epochs"),
-            patience=100,
-            num_workers=8,
-            seed=config.get("seed"),
-        )
-        _ = outcome_model.fit(ds_train, ds_valid)
-
-        ds_train_config = config.get("ds_train")
-        ds_train_config["mode"] = "pi"
-        ds_train = datasets.DATASETS.get(dataset_name)(**ds_train_config)
-        ds_valid_config = config.get("ds_valid")
-        ds_valid_config["mode"] = "pi"
-        ds_valid = datasets.DATASETS.get(dataset_name)(**ds_valid_config)
-
-        out_dir = experiment_dir / "checkpoints" / "pi"
-        propensity_model = models.CategoricalDensityNetwork(
-            job_dir=out_dir,
-            architecture="resnet",
-            dim_input=ds_train.dim_input,
-            dim_treatment=0,
-            dim_hidden=config.get("dim_hidden"),
-            dim_output=ds_train.dim_treatment,
-            depth=config.get("depth"),
-            negative_slope=config.get("negative_slope"),
-            batch_norm=False,
-            spectral_norm=config.get("spectral_norm"),
-            dropout_rate=config.get("dropout_rate"),
-            weight_decay=(0.5 * (1 - config.get("dropout_rate"))) / len(ds_train),
-            learning_rate=config.get("learning_rate"),
-            batch_size=config.get("batch_size"),
-            epochs=config.get("epochs"),
-            patience=100,
-            num_workers=8,
-            seed=config.get("seed"),
-        )
-        _ = propensity_model.fit(ds_train, ds_valid)
-        return -1
+    def trainer(**kwargs):
+        func = workflows.density_network_trainer(**kwargs)
+        return func
 
     results = []
     for trial in range(context.obj.get("num_trials")):
-        results.append(
-            trainer.remote(
-                config=context.obj,
-                experiment_dir=context.obj.get("experiment_dir"),
-                trial=trial,
+        for ensemble_id in range(ensemble_size):
+            results.append(
+                trainer.remote(
+                    config=context.obj,
+                    experiment_dir=context.obj.get("experiment_dir"),
+                    trial=trial,
+                    ensemble_id=ensemble_id,
+                )
             )
-        )
     ray.get(results)
 
 
