@@ -131,3 +131,4 @@ dmypy.json
 # Dev
 .idea/
 .vscode/
+experiments/
