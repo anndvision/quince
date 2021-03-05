@@ -45,13 +45,34 @@ def evaluate(experiment_dir):
             propensity_ensemble=propensity_ensemble,
             mc_samples_w=50,
             mc_samples_y=100,
-            y_std=ds_train.y_std[0],
             file_path=trial_dir / "intervals.json",
         )
+
+        kr = models.KernelRegressor(
+            dataset=ds_train,
+            initial_length_scale=1.0,
+            feature_extractor=outcome_ensemble[0].encoder.encoder
+            if config["dataset_name"] == "hcmnist"
+            else None,
+            propensity_model=propensity_ensemble[0],
+            verbose=False,
+        )
+        ds_valid = datasets.DATASETS.get(dataset_name)(**config.get("ds_valid"))
+        kr.fit_length_scale(ds_valid, grid=np.arange(0.1, 3.0, 0.002))
+
+        intervals_kernel = get_intervals_kernel(
+            dataset=ds_test, model=kr, file_path=trial_dir / "intervals_kernels.json"
+        )
+
         tau_true = torch.tensor(ds_test.mu1 - ds_test.mu0).to("cpu")
-        # p = Path("experiments") / f"trial-{i:03d}"
-        # p.mkdir(parents=True, exist_ok=True)
-        # plot_errorbars(intervals=intervals, tau_true=tau_true, output_dir=p)
+        p = Path("experiments") / f"trial-{i:03d}" / "density"
+        p.mkdir(parents=True, exist_ok=True)
+        plot_errorbars(intervals=intervals, tau_true=tau_true, output_dir=p)
+        p = Path("experiments") / f"trial-{i:03d}" / "kernel"
+        p.mkdir(parents=True, exist_ok=True)
+        plot_errorbars_kernel(
+            intervals=intervals_kernel, tau_true=tau_true, output_dir=p
+        )
         sweep_deferral(
             ignorance=ignorance,
             sensitivity=sensitivity,
@@ -138,7 +159,6 @@ def get_intervals(
     propensity_ensemble,
     mc_samples_w,
     mc_samples_y,
-    y_std,
     file_path,
 ):
     x_in = torch.tensor(dataset.x).to(outcome_ensemble[0].device)
@@ -164,9 +184,9 @@ def get_intervals(
                 mc_samples_y=mc_samples_y,
             )
             tau_hat = {
-                "bottom": (y_std * tau_bottom).numpy().tolist(),
-                "top": (y_std * tau_top).numpy().tolist(),
-                "mean": (y_std * tau_mean).numpy().tolist(),
+                "bottom": (dataset.y_std[0] * tau_bottom).numpy().tolist(),
+                "top": (dataset.y_std[0] * tau_top).numpy().tolist(),
+                "mean": (dataset.y_std[0] * tau_mean).numpy().tolist(),
             }
             intervals.update({k: tau_hat})
         with file_path.open(mode="w") as fp:
@@ -265,6 +285,63 @@ def predict_tau(
     return tau_mean, tau_bottom, tau_top
 
 
+def get_intervals_kernel(dataset, model, file_path):
+    if file_path.exists():
+        with file_path.open(mode="r") as fp:
+            intervals = json.load(fp)
+    else:
+        intervals = {}
+        for k, v in GAMMAS.items():
+            tau_mean, tau_bottom, tau_top = predict_tau_kernel(dataset.x, model, v)
+            tau_hat = {
+                "bottom": tau_bottom.tolist(),
+                "top": tau_top.tolist(),
+                "mean": tau_mean.tolist(),
+            }
+            intervals.update({k: tau_hat})
+        with file_path.open(mode="w") as fp:
+            json.dump(intervals, fp)
+    for k, v in intervals.items():
+        for k1, v2 in v.items():
+            intervals[k][k1] = torch.Tensor(v2)
+    return intervals
+
+
+def predict_tau_kernel(x, model, gamma):
+    model.gamma = gamma
+    k = model.k(x)
+
+    lambda_top_1 = []
+    lambda_top_0 = []
+    lambda_bottom_1 = []
+    lambda_bottom_0 = []
+    for i in range(k.shape[0]):
+        lambda_top_1.append(model.lambda_top_1(i, k).reshape(1, -1))
+        lambda_top_0.append(model.lambda_top_0(i, k).reshape(1, -1))
+        lambda_bottom_1.append(model.lambda_bottom_1(i, k).reshape(1, -1))
+        lambda_bottom_0.append(model.lambda_bottom_0(i, k).reshape(1, -1))
+    lambda_top_1 = np.vstack(lambda_top_1)
+    lambda_top_0 = np.vstack(lambda_top_0)
+    lambda_bottom_1 = np.vstack(lambda_bottom_1)
+    lambda_bottom_0 = np.vstack(lambda_bottom_0)
+
+    tau_top = []
+    tau_bottom = []
+    for i in range(k.shape[0]):
+        tau_top.append(
+            lambda_top_1[:, i : i + 1].max(axis=0)
+            - lambda_bottom_0[:, i : i + 1].min(axis=0)
+        )
+        tau_bottom.append(
+            lambda_bottom_1[:, i : i + 1].min(axis=0)
+            - lambda_top_0[:, i : i + 1].max(axis=0)
+        )
+    tau_top = np.stack(tau_top)
+    tau_bottom = np.stack(tau_bottom)
+    tau_mean = model.tau(k=k)
+    return tau_mean, tau_bottom, tau_top
+
+
 def plot_errorbars(intervals, tau_true, output_dir):
     for k in intervals.keys():
         tau_hat = intervals[k]
@@ -275,6 +352,25 @@ def plot_errorbars(intervals, tau_true, output_dir):
         tau_bottom = torch.abs(
             tau_hat["bottom"].mean(0) - 2 * tau_hat["bottom"].std(0) - tau_mean
         )
+        plotting.errorbar(
+            x=tau_true,
+            y=tau_mean,
+            y_err=torch.cat([tau_bottom.unsqueeze(0), tau_top.unsqueeze(0)]),
+            x_label=r"$\tau(\mathbf{x})$",
+            y_label=r"$\widehat{\tau}(\mathbf{x})$",
+            marker_label=f"$\log\Gamma = $ {k}",
+            x_pad=-20,
+            y_pad=-45,
+            file_path=output_dir / f"gamma-{k}.png",
+        )
+
+
+def plot_errorbars_kernel(intervals, tau_true, output_dir):
+    for k in intervals.keys():
+        tau_hat = intervals[k]
+        tau_mean = tau_hat["mean"].squeeze(-1)
+        tau_top = torch.abs(tau_hat["top"].squeeze(-1) - tau_mean)
+        tau_bottom = torch.abs(tau_hat["bottom"].squeeze(-1) - tau_mean)
         plotting.errorbar(
             x=tau_true,
             y=tau_mean,

@@ -73,7 +73,49 @@ def errorbar(
         capsize=2.0,
         label=marker_label,
     )
-    lim = max(np.abs(x.min()), np.abs(x.max()))
+    lim = max(np.abs(x.min()), np.abs(x.max())) * 1.1
+    r = np.arange(-lim, lim, 0.1)
+    _ = plt.plot(r, r, label="Ground Truth")
+    _ = plt.tick_params(axis="x", direction="in", pad=x_pad)
+    _ = plt.tick_params(axis="y", direction="in", pad=y_pad)
+    _ = plt.xlabel(x_label)
+    _ = plt.ylabel(y_label)
+    _ = plt.ylim([-lim, lim])
+    _ = plt.legend(loc=legend_loc)
+    _ = plt.savefig(file_path, dpi=300)
+    _ = plt.close()
+
+
+def scatter(
+    x,
+    mean,
+    bottom,
+    top,
+    x_label,
+    y_label,
+    marker_label=None,
+    x_pad=-20,
+    y_pad=-45,
+    legend_loc="upper left",
+    file_path=None,
+):
+    _ = plt.figure(figsize=(682 / 72, 512 / 72), dpi=72)
+    _ = plt.scatter(
+        x,
+        mean,
+        label="biased",
+    )
+    _ = plt.scatter(
+        x,
+        bottom,
+        label="bottom",
+    )
+    _ = plt.scatter(
+        x,
+        top,
+        label="top",
+    )
+    lim = max(np.abs(x.min()), np.abs(x.max())) * 1.1
     r = np.arange(-lim, lim, 0.1)
     _ = plt.plot(r, r, label="Ground Truth")
     _ = plt.tick_params(axis="x", direction="in", pad=x_pad)
