@@ -40,27 +40,28 @@ def density_network_trainer(
         json.dump(config, cp)
 
     out_dir = experiment_dir / "checkpoints" / f"model-{ensemble_id}" / "mu"
-    outcome_model = models.GaussianMixtureDensityNetwork(
-        job_dir=out_dir,
-        architecture="resnet",
-        dim_input=ds_train.dim_input,
-        dim_treatment=ds_train.dim_treatment,
-        dim_hidden=dim_hidden,
-        dim_output=dim_output,
-        depth=depth,
-        negative_slope=negative_slope,
-        batch_norm=False,
-        spectral_norm=spectral_norm,
-        dropout_rate=dropout_rate,
-        weight_decay=(0.5 * (1 - dropout_rate)) / len(ds_train),
-        learning_rate=learning_rate,
-        batch_size=batch_size,
-        epochs=epochs,
-        patience=100,
-        num_workers=8,
-        seed=ensemble_id,
-    )
-    _ = outcome_model.fit(ds_train, ds_valid)
+    if not (out_dir / "best_checkpoint.pt").exists():
+        outcome_model = models.GaussianMixtureDensityNetwork(
+            job_dir=out_dir,
+            architecture="resnet",
+            dim_input=ds_train.dim_input,
+            dim_treatment=ds_train.dim_treatment,
+            dim_hidden=dim_hidden,
+            dim_output=dim_output,
+            depth=depth,
+            negative_slope=negative_slope,
+            batch_norm=False,
+            spectral_norm=spectral_norm,
+            dropout_rate=dropout_rate,
+            weight_decay=(0.5 * (1 - dropout_rate)) / len(ds_train),
+            learning_rate=learning_rate,
+            batch_size=batch_size,
+            epochs=epochs,
+            patience=10,
+            num_workers=8,
+            seed=ensemble_id,
+        )
+        _ = outcome_model.fit(ds_train, ds_valid)
 
     ds_train_config = config.get("ds_train")
     ds_train_config["mode"] = "pi"
@@ -70,25 +71,26 @@ def density_network_trainer(
     ds_valid = datasets.DATASETS.get(dataset_name)(**ds_valid_config)
 
     out_dir = experiment_dir / "checkpoints" / f"model-{ensemble_id}" / "pi"
-    propensity_model = models.CategoricalDensityNetwork(
-        job_dir=out_dir,
-        architecture="resnet",
-        dim_input=ds_train.dim_input,
-        dim_treatment=0,
-        dim_hidden=dim_hidden,
-        dim_output=ds_train.dim_treatment,
-        depth=depth,
-        negative_slope=negative_slope,
-        batch_norm=False,
-        spectral_norm=spectral_norm,
-        dropout_rate=dropout_rate,
-        weight_decay=(0.5 * (1 - dropout_rate)) / len(ds_train),
-        learning_rate=learning_rate,
-        batch_size=batch_size,
-        epochs=epochs,
-        patience=100,
-        num_workers=8,
-        seed=ensemble_id,
-    )
-    _ = propensity_model.fit(ds_train, ds_valid)
+    if not (out_dir / "best_checkpoint.pt").exists():
+        propensity_model = models.CategoricalDensityNetwork(
+            job_dir=out_dir,
+            architecture="resnet",
+            dim_input=ds_train.dim_input,
+            dim_treatment=0,
+            dim_hidden=dim_hidden,
+            dim_output=ds_train.dim_treatment,
+            depth=depth,
+            negative_slope=negative_slope,
+            batch_norm=False,
+            spectral_norm=spectral_norm,
+            dropout_rate=dropout_rate,
+            weight_decay=(0.5 * (1 - dropout_rate)) / len(ds_train),
+            learning_rate=learning_rate,
+            batch_size=batch_size,
+            epochs=epochs,
+            patience=10,
+            num_workers=8,
+            seed=ensemble_id,
+        )
+        _ = propensity_model.fit(ds_train, ds_valid)
     return -1
