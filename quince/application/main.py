@@ -1,4 +1,5 @@
 import ray
+import math
 import click
 
 from torch import cuda
@@ -22,38 +23,39 @@ def cli(context):
     help="location for reading checkpoints",
 )
 @click.option(
-    "--gpu-per-trial",
-    default=0.0,
-    type=float,
-    help="number of gpus for each trial, default=0",
+    "--output-dir",
+    type=str,
+    required=False,
+    default=None,
+    help="location for writing results",
 )
 @click.option(
-    "--cpu-per-trial",
-    default=1.0,
-    type=float,
-    help="number of cpus for each trial, default=1",
+    "--mc-samples",
+    type=int,
+    required=False,
+    default=100,
+    help="Number of samples from p(y | x, t), default=100",
 )
 @click.pass_context
 def evaluate(
     context,
     experiment_dir,
-    gpu_per_trial,
-    cpu_per_trial,
+    output_dir,
+    mc_samples,
 ):
-    ray.init(
-        num_gpus=context.obj["n_gpu"],
-        dashboard_host="127.0.0.1",
-        ignore_reinit_error=True,
-    )
-    gpu_per_trial = 0 if context.obj["n_gpu"] == 0 else gpu_per_trial
+    output_dir = experiment_dir if output_dir is None else output_dir
     context.obj.update(
         {
             "experiment_dir": experiment_dir,
-            "gpu-per-trial": gpu_per_trial,
-            "cpu-per-trial": cpu_per_trial,
+            "output_dir": output_dir,
+            "mc_samples": mc_samples,
         }
     )
-    workflows.evaluation.evaluate(experiment_dir=Path(experiment_dir))
+    workflows.evaluation.evaluate(
+        experiment_dir=Path(experiment_dir),
+        output_dir=Path(output_dir),
+        mc_samples=mc_samples,
+    )
 
 
 @cli.command("train")
@@ -162,14 +164,207 @@ def ihdp(
     )
 
 
+@cli.command("hcmnist")
+@click.pass_context
+@click.option(
+    "--root",
+    type=str,
+    required=True,
+    help="location of dataset",
+)
+@click.option(
+    "--lambda-star",
+    default=math.exp(1.0),
+    type=float,
+    help="Ground truth level of hidden confounding, default=2.7",
+)
+@click.option(
+    "--gamma",
+    default=4.0,
+    type=float,
+    help="Coefficient for u effect on y, default=4.0",
+)
+@click.option(
+    "--beta",
+    default=0.75,
+    type=float,
+    help="Coefficient for x effect on t, default=2.0",
+)
+@click.option(
+    "--sigma",
+    default=1.0,
+    type=float,
+    help="standard deviation of random noise in y, default=1.0",
+)
+@click.option(
+    "--domain-limit",
+    default=2.0,
+    type=float,
+    help="Domain of x is [-domain_limit, domain_limit], default=2.5",
+)
+def hcmnist(
+    context,
+    root,
+    lambda_star,
+    gamma,
+    beta,
+    sigma,
+    domain_limit,
+):
+    job_dir = Path(context.obj.get("job_dir"))
+    dataset_name = "hcmnist"
+    experiment_dir = (
+        job_dir
+        / dataset_name
+        / f"ls-{lambda_star:.02f}_ga-{gamma:.02f}_be-{beta:.02f}_si-{sigma:.02f}_dl-{domain_limit:.02f}"
+    )
+    context.obj.update(
+        {
+            "dataset_name": dataset_name,
+            "experiment_dir": str(experiment_dir),
+            "ds_train": {
+                "root": root,
+                "lambda_star": lambda_star,
+                "split": "train",
+                "gamma": gamma,
+                "beta": beta,
+                "mode": "mu",
+                "p_u": "bernoulli",
+                "sigma_y": sigma,
+                "domain": domain_limit,
+                "seed": context.obj.get("seed"),
+            },
+            "ds_valid": {
+                "root": root,
+                "lambda_star": lambda_star,
+                "split": "valid",
+                "gamma": gamma,
+                "beta": beta,
+                "mode": "mu",
+                "p_u": "bernoulli",
+                "sigma_y": sigma,
+                "domain": domain_limit,
+                "seed": context.obj.get("seed") + 1,
+            },
+            "ds_test": {
+                "root": root,
+                "lambda_star": lambda_star,
+                "split": "test",
+                "gamma": gamma,
+                "beta": beta,
+                "mode": "mu",
+                "p_u": "bernoulli",
+                "sigma_y": sigma,
+                "domain": domain_limit,
+                "seed": context.obj.get("seed") + 2,
+            },
+        }
+    )
+
+
+@cli.command("synthetic")
+@click.pass_context
+@click.option(
+    "--num-examples",
+    default=1000,
+    type=int,
+    help="number of training examples, defaul=1000",
+)
+@click.option(
+    "--lambda-star",
+    default=math.exp(1.0),
+    type=float,
+    help="Ground truth level of hidden confounding, default=2.7",
+)
+@click.option(
+    "--gamma",
+    default=4.0,
+    type=float,
+    help="Coefficient for u effect on y, default=4.0",
+)
+@click.option(
+    "--beta",
+    default=0.75,
+    type=float,
+    help="Coefficient for x effect on t, default=2.0",
+)
+@click.option(
+    "--sigma",
+    default=1.0,
+    type=float,
+    help="standard deviation of random noise in y, default=1.0",
+)
+@click.option(
+    "--domain-limit",
+    default=2.0,
+    type=float,
+    help="Domain of x is [-domain_limit, domain_limit], default=2.5",
+)
+def synthetic(
+    context,
+    num_examples,
+    lambda_star,
+    gamma,
+    beta,
+    sigma,
+    domain_limit,
+):
+    job_dir = Path(context.obj.get("job_dir"))
+    dataset_name = "synthetic"
+    experiment_dir = (
+        job_dir
+        / dataset_name
+        / f"ne-{num_examples}_ls-{lambda_star:.02f}_ga-{gamma:.02f}_be-{beta:.02f}_si-{sigma:.02f}_dl-{domain_limit:.02f}"
+    )
+    context.obj.update(
+        {
+            "dataset_name": dataset_name,
+            "experiment_dir": str(experiment_dir),
+            "ds_train": {
+                "num_examples": num_examples,
+                "lambda_star": lambda_star,
+                "gamma": gamma,
+                "beta": beta,
+                "mode": "mu",
+                "p_u": "bernoulli",
+                "sigma_y": sigma,
+                "domain": domain_limit,
+                "seed": context.obj.get("seed"),
+            },
+            "ds_valid": {
+                "num_examples": num_examples // 10,
+                "lambda_star": lambda_star,
+                "gamma": gamma,
+                "beta": beta,
+                "mode": "mu",
+                "p_u": "bernoulli",
+                "sigma_y": sigma,
+                "domain": domain_limit,
+                "seed": context.obj.get("seed") + 1,
+            },
+            "ds_test": {
+                "num_examples": min(num_examples, 2000),
+                "lambda_star": lambda_star,
+                "gamma": gamma,
+                "beta": beta,
+                "mode": "mu",
+                "p_u": "bernoulli",
+                "sigma_y": sigma,
+                "domain": domain_limit,
+                "seed": context.obj.get("seed") + 2,
+            },
+        }
+    )
+
+
 @cli.command("density-network")
 @click.pass_context
-@click.option("--dim-hidden", default=400, type=int, help="num neurons")
+@click.option("--dim-hidden", default=200, type=int, help="num neurons")
 @click.option("--num-components", default=5, type=int, help="num mixture components")
 @click.option("--depth", default=3, type=int, help="depth of feature extractor")
 @click.option(
     "--negative-slope",
-    default=0.1,
+    default=-1,
     type=float,
     help="negative slope of leaky relu, default=-1 use elu",
 )
@@ -178,7 +373,7 @@ def ihdp(
 )
 @click.option(
     "--spectral-norm",
-    default=0.0,
+    default=3.0,
     type=float,
     help="Spectral normalization coefficient. If 0.0 do not use spectral norm, default=0.0",
 )
@@ -200,7 +395,7 @@ def ihdp(
 @click.option(
     "--ensemble-size",
     type=int,
-    default=1,
+    default=10,
     help="number of models in ensemble, default=1",
 )
 def density_network(

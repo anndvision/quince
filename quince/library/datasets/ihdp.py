@@ -75,7 +75,12 @@ class IHDP(data.Dataset):
         omega = (mu1[t == 1] - mu0[t == 1]).mean(0) - 4
         mu1 -= omega
         df["mu1"] = mu1
-        y = t * mu1 + (1 - t) * mu0 + rng.normal(size=t.shape)
+        eps = rng.normal(size=t.shape)
+        y0 = mu0 + eps
+        df["y0"] = y0
+        y1 = mu1 + eps
+        df["y1"] = y1
+        y = t * y1 + (1 - t) * y0
         df["y"] = y
         # Train test split
         df_train, df_test = model_selection.train_test_split(
@@ -104,6 +109,8 @@ class IHDP(data.Dataset):
             self.t = df_test["treat"].to_numpy(dtype="float32")
             self.mu0 = df_test["mu0"].to_numpy(dtype="float32")
             self.mu1 = df_test["mu1"].to_numpy(dtype="float32")
+            self.y0 = df_test["y0"].to_numpy(dtype="float32")
+            self.y1 = df_test["y1"].to_numpy(dtype="float32")
             if mode == "mu":
                 self.y = self.mu1 - self.mu0
             elif mode == "pi":
@@ -124,6 +131,8 @@ class IHDP(data.Dataset):
             self.t = df["treat"].to_numpy(dtype="float32")
             self.mu0 = df["mu0"].to_numpy(dtype="float32")
             self.mu1 = df["mu1"].to_numpy(dtype="float32")
+            self.y0 = df["y0"].to_numpy(dtype="float32")
+            self.y1 = df["y1"].to_numpy(dtype="float32")
             if mode == "mu":
                 self.y = df["y"].to_numpy(dtype="float32")
             elif mode == "pi":
