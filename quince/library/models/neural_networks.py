@@ -5,7 +5,8 @@ from ignite import metrics
 
 from quince.library.models import core
 
-from quince.library.modules import dense
+from quince.library.modules import convolution, dense
+from quince.library.modules import tarnet
 from quince.library.modules import variational
 
 
@@ -37,30 +38,66 @@ class _NeuralNetwork(core.PyTorchModel):
             seed=seed,
             num_workers=num_workers,
         )
-        self.encoder = (
-            dense.TARNet(
-                architecture=architecture,
-                dim_input=dim_input,
-                dim_hidden=dim_hidden,
-                dim_treatment=dim_treatment,
-                depth=depth,
-                negative_slope=negative_slope,
-                batch_norm=batch_norm,
-                dropout_rate=dropout_rate,
-                spectral_norm=spectral_norm,
+        if dim_treatment > 0:
+            self.encoder = (
+                tarnet.TARNet(
+                    architecture=architecture,
+                    dim_input=dim_input,
+                    dim_hidden=dim_hidden,
+                    dim_treatment=dim_treatment,
+                    depth=depth,
+                    negative_slope=negative_slope,
+                    batch_norm=batch_norm,
+                    dropout_rate=dropout_rate,
+                    spectral_norm=spectral_norm,
+                )
+                if isinstance(dim_input, list) or (dim_input > 1)
+                else dense.NeuralNetwork(
+                    architecture=architecture,
+                    dim_input=dim_input + dim_treatment,
+                    dim_hidden=dim_hidden,
+                    depth=depth,
+                    negative_slope=negative_slope,
+                    batch_norm=batch_norm,
+                    dropout_rate=dropout_rate,
+                    spectral_norm=spectral_norm,
+                )
             )
-            if dim_treatment > 0
-            else dense.NeuralNetwork(
-                architecture=architecture,
-                dim_input=dim_input,
-                dim_hidden=dim_hidden,
-                depth=depth,
-                negative_slope=negative_slope,
-                batch_norm=batch_norm,
-                dropout_rate=dropout_rate,
-                spectral_norm=spectral_norm,
+        else:
+            self.encoder = (
+                nn.Sequential(
+                    convolution.ResNet(
+                        dim_input=dim_input,
+                        layers=[2, 2, 2, 2],
+                        base_width=dim_hidden // 8,
+                        negative_slope=negative_slope,
+                        dropout_rate=dropout_rate,
+                        batch_norm=batch_norm,
+                        spectral_norm=spectral_norm,
+                        stem_kernel_size=5,
+                        stem_kernel_stride=1,
+                        stem_kernel_padding=2,
+                        stem_pool=False,
+                    ),
+                    dense.Activation(
+                        dim_input=dim_hidden,
+                        negative_slope=negative_slope,
+                        dropout_rate=dropout_rate,
+                        batch_norm=batch_norm,
+                    ),
+                )
+                if isinstance(dim_input, list)
+                else dense.NeuralNetwork(
+                    architecture=architecture,
+                    dim_input=dim_input,
+                    dim_hidden=dim_hidden,
+                    depth=depth,
+                    negative_slope=negative_slope,
+                    batch_norm=batch_norm,
+                    dropout_rate=dropout_rate,
+                    spectral_norm=spectral_norm,
+                )
             )
-        )
         self.metrics = {
             "loss": metrics.Average(
                 output_transform=lambda x: -x["outputs"].log_prob(x["targets"]).mean(),
@@ -173,7 +210,7 @@ class CategoricalDensityNetwork(_NeuralNetwork):
         self.network = nn.Sequential(
             self.encoder,
             variational.Categorical(
-                dim_input=self.encoder.dim_output,
+                dim_input=dim_hidden,
                 dim_output=dim_output,
             ),
         )
