@@ -1,2 +1,4 @@
-from quince.application.workflows.training import density_network_trainer
+from quince.application.workflows import tuning
+from quince.application.workflows import training
 from quince.application.workflows import evaluation
+

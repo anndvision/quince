@@ -4,6 +4,8 @@ import torch
 from abc import ABC
 from shutil import copyfile
 
+from ray import tune
+
 from ignite import utils
 from ignite import engine
 from ignite import distributed
@@ -141,14 +143,20 @@ class PyTorchModel(BaseModel):
             "optimizer": self.optimizer.state_dict(),
             "engine": self.trainer.state,
         }
-        p = os.path.join(self.job_dir, "checkpoint.pt")
-        torch.save(state, p)
-        if is_best:
-            copyfile(p, os.path.join(self.job_dir, "best_checkpoint.pt"))
+
+        if not tune.is_session_enabled():
+            p = os.path.join(self.job_dir, "checkpoint.pt")
+            torch.save(state, p)
+            if is_best:
+                copyfile(p, os.path.join(self.job_dir, "best_checkpoint.pt"))
 
     def load(self, load_best=False):
-        file_name = "best_checkpoint.pt" if load_best else "checkpoint.pt"
-        p = os.path.join(self.job_dir, file_name)
+        if tune.is_session_enabled():
+            with tune.checkpoint_dir(step=self.trainer.state.epoch) as checkpoint_dir:
+                p = os.path.join(checkpoint_dir, "checkpoint.pt")
+        else:
+            file_name = "best_checkpoint.pt" if load_best else "checkpoint.pt"
+            p = os.path.join(self.job_dir, file_name)
         if not os.path.exists(p):
             self.logger.info(
                 "Checkpoint {} does not exist, starting a new engine".format(p)

@@ -1,3 +1,5 @@
+from ray import tune
+
 from torch import nn
 from torch import optim
 
@@ -5,8 +7,9 @@ from ignite import metrics
 
 from quince.library.models import core
 
-from quince.library.modules import convolution, dense
+from quince.library.modules import dense
 from quince.library.modules import tarnet
+from quince.library.modules import convolution
 from quince.library.modules import variational
 
 
@@ -138,6 +141,8 @@ class _NeuralNetwork(core.PyTorchModel):
             print("train {:<{justify}} {:<5}".format(k, v, justify=justify))
         self.evaluator.run(tune_loader)
         tune_metrics = self.evaluator.state.metrics
+        if tune.is_session_enabled():
+            tune.report(mean_loss=tune_metrics["loss"])
         justify = max(len(k) for k in tune_metrics) + 2
         for k, v in tune_metrics.items():
             if type(v) == float:

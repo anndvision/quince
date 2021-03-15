@@ -142,7 +142,7 @@ def evaluate(experiment_dir, output_dir, mc_samples):
                     output_dir=p_density,
                 )
         pi_true = (
-            tau_true > 0.0 if config["dataset_name"] == "ihdp" else tau_true <= 0.0
+            tau_true >= 0.0 if config["dataset_name"] == "ihdp" else tau_true < 0.0
         )
         update_ignorance(
             results=summary,
@@ -176,6 +176,7 @@ def evaluate(experiment_dir, output_dir, mc_samples):
             intervals=intervals,
             pi_true=pi_true.numpy().astype("float32"),
             epistemic_uncertainty=True,
+            lt=False if config["dataset_name"] == "ihdp" else True,
         )
         for k, v in summary["policy_risk"]["risk"].items():
             se = stats.sem(v)
@@ -195,6 +196,7 @@ def evaluate(experiment_dir, output_dir, mc_samples):
                 intervals=intervals_kernel,
                 pi_true=pi_true.numpy().astype("float32"),
                 epistemic_uncertainty=False,
+                lt=False if config["dataset_name"] == "ihdp" else True,
             )
             for k, v in summary_kernel["policy_risk"]["risk"].items():
                 se = stats.sem(v)
@@ -766,7 +768,9 @@ def interpolate_values(deferral_rate, error_rate):
     return np.asarray(means) + 1e-3, np.asarray(cis)
 
 
-def update_summaries(summary, dataset, intervals, pi_true, epistemic_uncertainty=False):
+def update_summaries(
+    summary, dataset, intervals, pi_true, epistemic_uncertainty=False, lt=True
+):
     risk = float(
         utils.policy_risk(
             pi=pi_true,
@@ -777,7 +781,9 @@ def update_summaries(summary, dataset, intervals, pi_true, epistemic_uncertainty
     summary["policy_risk"]["risk"]["true"].append(risk)
     for k in GAMMAS.keys():
         tau_hat = intervals[k]
-        pi_hat = policy(tau_hat=tau_hat, epistemic_uncertainty=epistemic_uncertainty)
+        pi_hat = policy(
+            tau_hat=tau_hat, epistemic_uncertainty=epistemic_uncertainty, lt=lt
+        )
         risk_hat = utils.policy_risk(
             pi=pi_hat, y1=dataset.y1.ravel(), y0=dataset.y0.ravel()
         )
@@ -787,14 +793,22 @@ def update_summaries(summary, dataset, intervals, pi_true, epistemic_uncertainty
         )
 
 
-def policy(tau_hat, epistemic_uncertainty):
-    return (
-        (
-            (tau_hat["top"].mean(0) + np.nan_to_num(2 * tau_hat["top"].std(0))) < 0
-        ).float()
-        if epistemic_uncertainty
-        else (tau_hat["top"].mean(0) < 0).float()
-    )
+def policy(tau_hat, epistemic_uncertainty, lt=True):
+    if lt:
+        tau_top = (
+            tau_hat["top"].mean(0) + np.nan_to_num(2 * tau_hat["top"].std(0))
+            if epistemic_uncertainty
+            else tau_hat["top"].mean(0)
+        )
+        pi = (tau_top < 0).float()
+    else:
+        tau_bottom = (
+            tau_hat["bottom"].mean(0) + np.nan_to_num(2 * tau_hat["bottom"].std(0))
+            if epistemic_uncertainty
+            else tau_hat["bottom"].mean(0)
+        )
+        pi = (tau_bottom >= 0).float()
+    return pi
 
 
 GAMMAS = {

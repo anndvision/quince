@@ -2,6 +2,9 @@ import ray
 import math
 import click
 
+from ray.tune.suggest.hyperopt import HyperOptSearch
+from ray.tune.schedulers import AsyncHyperBandScheduler
+
 from torch import cuda
 
 from pathlib import Path
@@ -13,49 +16,6 @@ from quince.application import workflows
 @click.pass_context
 def cli(context):
     context.obj = {"n_gpu": cuda.device_count()}
-
-
-@cli.command("evaluate")
-@click.option(
-    "--experiment-dir",
-    type=str,
-    required=True,
-    help="location for reading checkpoints",
-)
-@click.option(
-    "--output-dir",
-    type=str,
-    required=False,
-    default=None,
-    help="location for writing results",
-)
-@click.option(
-    "--mc-samples",
-    type=int,
-    required=False,
-    default=100,
-    help="Number of samples from p(y | x, t), default=100",
-)
-@click.pass_context
-def evaluate(
-    context,
-    experiment_dir,
-    output_dir,
-    mc_samples,
-):
-    output_dir = experiment_dir if output_dir is None else output_dir
-    context.obj.update(
-        {
-            "experiment_dir": experiment_dir,
-            "output_dir": output_dir,
-            "mc_samples": mc_samples,
-        }
-    )
-    workflows.evaluation.evaluate(
-        experiment_dir=Path(experiment_dir),
-        output_dir=Path(output_dir),
-        mc_samples=mc_samples,
-    )
 
 
 @cli.command("train")
@@ -109,7 +69,109 @@ def train(
             "cpu_per_trial": cpu_per_trial,
             "verbose": verbose,
             "seed": seed,
+            "tune": False,
         }
+    )
+
+
+@cli.command("tune")
+@click.option(
+    "--job-dir",
+    type=str,
+    required=True,
+    help="location for writing checkpoints and results",
+)
+@click.option(
+    "--max-samples",
+    default=100,
+    type=int,
+    help="maximum number of search space samples, default=100",
+)
+@click.option(
+    "--gpu-per-trial",
+    default=0.0,
+    type=float,
+    help="number of gpus for each trial, default=0",
+)
+@click.option(
+    "--cpu-per-trial",
+    default=1.0,
+    type=float,
+    help="number of cpus for each trial, default=1",
+)
+@click.option(
+    "--seed",
+    default=1331,
+    type=int,
+    help="random number generator seed, default=1331",
+)
+@click.pass_context
+def tune(
+    context,
+    job_dir,
+    max_samples,
+    gpu_per_trial,
+    cpu_per_trial,
+    seed,
+):
+    ray.init(
+        num_gpus=context.obj["n_gpu"],
+        dashboard_host="127.0.0.1",
+        ignore_reinit_error=True,
+    )
+    gpu_per_trial = 0 if context.obj["n_gpu"] == 0 else gpu_per_trial
+    context.obj.update(
+        {
+            "job_dir": job_dir,
+            "max_samples": max_samples,
+            "gpu_per_trial": gpu_per_trial,
+            "cpu_per_trial": cpu_per_trial,
+            "seed": seed,
+            "tune": True,
+        }
+    )
+
+
+@cli.command("evaluate")
+@click.option(
+    "--experiment-dir",
+    type=str,
+    required=True,
+    help="location for reading checkpoints",
+)
+@click.option(
+    "--output-dir",
+    type=str,
+    required=False,
+    default=None,
+    help="location for writing results",
+)
+@click.option(
+    "--mc-samples",
+    type=int,
+    required=False,
+    default=100,
+    help="Number of samples from p(y | x, t), default=100",
+)
+@click.pass_context
+def evaluate(
+    context,
+    experiment_dir,
+    output_dir,
+    mc_samples,
+):
+    output_dir = experiment_dir if output_dir is None else output_dir
+    context.obj.update(
+        {
+            "experiment_dir": experiment_dir,
+            "output_dir": output_dir,
+            "mc_samples": mc_samples,
+        }
+    )
+    workflows.evaluation.evaluate(
+        experiment_dir=Path(experiment_dir),
+        output_dir=Path(output_dir),
+        mc_samples=mc_samples,
     )
 
 
@@ -359,7 +421,7 @@ def synthetic(
 
 @cli.command("density-network")
 @click.pass_context
-@click.option("--dim-hidden", default=200, type=int, help="num neurons")
+@click.option("--dim-hidden", default=400, type=int, help="num neurons")
 @click.option("--num-components", default=5, type=int, help="num mixture components")
 @click.option("--depth", default=3, type=int, help="depth of feature extractor")
 @click.option(
@@ -369,11 +431,11 @@ def synthetic(
     help="negative slope of leaky relu, default=-1 use elu",
 )
 @click.option(
-    "--dropout-rate", default=0.1, type=float, help="dropout rate, default=0.1"
+    "--dropout-rate", default=0.15, type=float, help="dropout rate, default=0.1"
 )
 @click.option(
     "--spectral-norm",
-    default=3.0,
+    default=0.95,
     type=float,
     help="Spectral normalization coefficient. If 0.0 do not use spectral norm, default=0.0",
 )
@@ -411,41 +473,50 @@ def density_network(
     epochs,
     ensemble_size,
 ):
-    context.obj.update(
-        {
-            "dim_hidden": dim_hidden,
-            "depth": depth,
-            "num_components": num_components,
-            "negative_slope": negative_slope,
-            "dropout_rate": dropout_rate,
-            "spectral_norm": spectral_norm,
-            "learning_rate": learning_rate,
-            "batch_size": batch_size,
-            "epochs": epochs,
-            "ensemble_size": ensemble_size,
-        }
-    )
+    if context.obj["tune"]:
+        context.obj.update(
+            {
+                "epochs": epochs,
+                "ensemble_size": ensemble_size,
+            }
+        )
+        workflows.tuning.hyper_tune(config=context.obj)
+    else:
+        context.obj.update(
+            {
+                "dim_hidden": dim_hidden,
+                "depth": depth,
+                "num_components": num_components,
+                "negative_slope": negative_slope,
+                "dropout_rate": dropout_rate,
+                "spectral_norm": spectral_norm,
+                "learning_rate": learning_rate,
+                "batch_size": batch_size,
+                "epochs": epochs,
+                "ensemble_size": ensemble_size,
+            }
+        )
 
-    @ray.remote(
-        num_gpus=context.obj.get("gpu_per_trial"),
-        num_cpus=context.obj.get("cpu_per_trial"),
-    )
-    def trainer(**kwargs):
-        func = workflows.density_network_trainer(**kwargs)
-        return func
+        @ray.remote(
+            num_gpus=context.obj.get("gpu_per_trial"),
+            num_cpus=context.obj.get("cpu_per_trial"),
+        )
+        def trainer(**kwargs):
+            func = workflows.training.density_network_trainer(**kwargs)
+            return func
 
-    results = []
-    for trial in range(context.obj.get("num_trials")):
-        for ensemble_id in range(ensemble_size):
-            results.append(
-                trainer.remote(
-                    config=context.obj,
-                    experiment_dir=context.obj.get("experiment_dir"),
-                    trial=trial,
-                    ensemble_id=ensemble_id,
+        results = []
+        for trial in range(context.obj.get("num_trials")):
+            for ensemble_id in range(ensemble_size):
+                results.append(
+                    trainer.remote(
+                        config=context.obj,
+                        experiment_dir=context.obj.get("experiment_dir"),
+                        trial=trial,
+                        ensemble_id=ensemble_id,
+                    )
                 )
-            )
-    ray.get(results)
+        ray.get(results)
 
 
 if __name__ == "__main__":
