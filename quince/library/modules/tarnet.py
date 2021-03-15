@@ -24,7 +24,7 @@ class TARNet(nn.Module):
         self.encoder = (
             convolution.ResNet(
                 dim_input=dim_input,
-                layers=[2, 2, 2, 2],
+                layers=[2] * depth,
                 base_width=dim_hidden // 8,
                 negative_slope=negative_slope,
                 dropout_rate=dropout_rate,
