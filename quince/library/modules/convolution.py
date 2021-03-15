@@ -156,6 +156,7 @@ class ResNet(nn.Module):
         stem_kernel_stride: int = 2,
         stem_kernel_padding: int = 3,
         stem_pool: bool = True,
+        output_activation=False,
     ):
         super(ResNet, self).__init__()
         self.dim_input = dim_input
@@ -211,6 +212,16 @@ class ResNet(nn.Module):
             dy = round(1 + (dy + 2 - 3) / 2)
         self.op.add_module("average_pooling", nn.AdaptiveAvgPool2d((1, 1)))
         self.dim_output = base_width * 2 ** (len(layers) - 1)
+        if output_activation:
+            self.op.add_module(
+                "output_activation",
+                Activation(
+                    num_features=self.dim_output,
+                    negative_slope=negative_slope,
+                    dropout_rate=dropout_rate,
+                    batch_norm=batch_norm,
+                ),
+            )
 
     def forward(self, inputs):
         shape = [-1] + self.dim_input
