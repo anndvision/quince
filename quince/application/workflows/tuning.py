@@ -47,7 +47,9 @@ def tune_desity_estimator(config):
 def hyper_tune(config):
     space = {
         "dim_hidden": tune.choice([50, 100, 200, 400]),
-        "depth": tune.choice([2, 3, 4, 5]),
+        "depth": tune.choice([2, 3, 4, 5])
+        if config["dataset_name"] != "hcmnist"
+        else tune.choice([1, 2, 3, 4]),
         "num_components": tune.choice([1, 2, 3, 4, 5]),
         "negative_slope": tune.choice([0.0, 0.1, 0.2, 0.3, 0.4, 0.5, -1.0]),
         "dropout_rate": tune.choice([0.0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.5]),
