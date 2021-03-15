@@ -13,7 +13,7 @@ setup(
     install_requires=[
         "black",
         "pyreadr",
-        "ray>=1.2.0",
+        "ray[tune]>=1.2.0",
         "click>=7.1.2",
         "torch>=1.7.1",
         "numpy>=1.20.1",
@@ -21,6 +21,7 @@ setup(
         "pandas>=1.2.2",
         "jupyter>=1.0.0",
         "seaborn>=0.11.1",
+        "hyperopt>=0.2.5",
         "matplotlib>=3.3.4",
         "tensorboard>=2.4.1",
         "torchvision>=0.8.2",
