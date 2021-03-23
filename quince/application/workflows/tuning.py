@@ -1,6 +1,6 @@
 from ray import tune
-from ray.tune import suggest
 from ray.tune import schedulers
+from ray.tune.suggest import hyperopt
 
 from quince.library import models
 from quince.library import datasets
@@ -57,13 +57,13 @@ def hyper_tune(config):
         "learning_rate": tune.choice([5e-5, 1e-4, 2e-4, 5e-4, 1e-3]),
         "batch_size": tune.choice([16, 32, 64, 100, 200]),
     }
-    algorithm = suggest.hyperopt.HyperOptSearch(
+    algorithm = hyperopt.HyperOptSearch(
         space,
         metric="mean_loss",
         mode="min",
         n_initial_points=20,
     )
-    scheduler = schedulers.AsyncHyperBandScheduler()
+    scheduler = schedulers.AsyncHyperBandScheduler(grace_period=10)
     analysis = tune.run(
         run_or_experiment=tune_desity_estimator,
         metric="mean_loss",
