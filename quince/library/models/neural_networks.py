@@ -68,26 +68,19 @@ class _NeuralNetwork(core.PyTorchModel):
             )
         else:
             self.encoder = (
-                nn.Sequential(
-                    convolution.ResNet(
-                        dim_input=dim_input,
-                        layers=[2] * depth,
-                        base_width=dim_hidden // 8,
-                        negative_slope=negative_slope,
-                        dropout_rate=dropout_rate,
-                        batch_norm=batch_norm,
-                        spectral_norm=spectral_norm,
-                        stem_kernel_size=5,
-                        stem_kernel_stride=1,
-                        stem_kernel_padding=2,
-                        stem_pool=False,
-                    ),
-                    dense.Activation(
-                        dim_input=dim_hidden,
-                        negative_slope=negative_slope,
-                        dropout_rate=dropout_rate,
-                        batch_norm=batch_norm,
-                    ),
+                convolution.ResNet(
+                    dim_input=dim_input,
+                    layers=[2] * depth,
+                    base_width=dim_hidden // 8,
+                    negative_slope=negative_slope,
+                    dropout_rate=dropout_rate,
+                    batch_norm=batch_norm,
+                    spectral_norm=spectral_norm,
+                    stem_kernel_size=5,
+                    stem_kernel_stride=1,
+                    stem_kernel_padding=2,
+                    stem_pool=False,
+                    output_activation=True,
                 )
                 if isinstance(dim_input, list)
                 else dense.NeuralNetwork(
@@ -215,7 +208,7 @@ class CategoricalDensityNetwork(_NeuralNetwork):
         self.network = nn.Sequential(
             self.encoder,
             variational.Categorical(
-                dim_input=dim_hidden,
+                dim_input=self.encoder.dim_output,
                 dim_output=dim_output,
             ),
         )

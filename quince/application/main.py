@@ -186,14 +186,21 @@ def evaluate(
     type=bool,
     help="Censor hidden confounder, default=True",
 )
+@click.option(
+    "--beta-u",
+    default=None,
+    type=float,
+    help="Coefficient value for hidden confounder, random if None, default=None",
+)
 def ihdp(
     context,
     root,
     hidden_confounding,
+    beta_u,
 ):
     job_dir = Path(context.obj.get("job_dir"))
     dataset_name = "ihdp"
-    experiment_dir = job_dir / dataset_name / f"hc-{hidden_confounding}"
+    experiment_dir = job_dir / dataset_name / f"hc-{hidden_confounding}_beta-{beta_u}"
     context.obj.update(
         {
             "dataset_name": dataset_name,
@@ -203,6 +210,7 @@ def ihdp(
                 "split": "train",
                 "mode": "mu",
                 "hidden_confounding": hidden_confounding,
+                "beta_u": beta_u,
                 "seed": context.obj.get("seed"),
             },
             "ds_valid": {
@@ -210,6 +218,7 @@ def ihdp(
                 "split": "valid",
                 "mode": "mu",
                 "hidden_confounding": hidden_confounding,
+                "beta_u": beta_u,
                 "seed": context.obj.get("seed"),
             },
             "ds_test": {
@@ -217,6 +226,7 @@ def ihdp(
                 "split": "test",
                 "mode": "mu",
                 "hidden_confounding": hidden_confounding,
+                "beta_u": beta_u,
                 "seed": context.obj.get("seed"),
             },
         }

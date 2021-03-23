@@ -45,7 +45,7 @@ _HIDDEN_COVARIATE = [
 
 
 class IHDP(data.Dataset):
-    def __init__(self, root, split, mode, seed, hidden_confounding):
+    def __init__(self, root, split, mode, seed, hidden_confounding, beta_u=None):
 
         root = Path(root)
         df = pyreadr.read_r(str(root / "ihdp.RData"))["ihdp"]
@@ -66,8 +66,12 @@ class IHDP(data.Dataset):
         beta_x = rng.choice(
             [0.0, 0.1, 0.2, 0.3, 0.4], size=(24,), p=[0.6, 0.1, 0.1, 0.1, 0.1]
         )
-        beta_u = rng.choice(
-            [0.1, 0.2, 0.3, 0.4, 0.5], size=(1,), p=[0.2, 0.2, 0.2, 0.2, 0.2]
+        beta_u = (
+            rng.choice(
+                [0.1, 0.2, 0.3, 0.4, 0.5], size=(1,), p=[0.2, 0.2, 0.2, 0.2, 0.2]
+            )
+            if beta_u is None
+            else np.asarray([beta_u])
         )
         mu0 = np.exp((x + 0.5).dot(beta_x) + (u + 0.5).dot(beta_u))
         df["mu0"] = mu0

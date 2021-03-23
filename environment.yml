@@ -1,8 +1,12 @@
 name: quince
 channels:
+  - pytorch
   - defaults
 dependencies:
-  - pip
-  - python=3.7
+  - black
+  - pip>=21.0.1
+  - python>=3.6
+  - jupyter>=1.0.0
+  - pytorch>=1.7.1
   - pip:
       - .

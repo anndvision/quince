@@ -178,6 +178,7 @@ def evaluate(experiment_dir, output_dir, mc_samples):
             epistemic_uncertainty=True,
             lt=False if config["dataset_name"] == "ihdp" else True,
         )
+
         if len(ds_train) <= 5000:
             update_summaries(
                 summary=summary_kernel,
