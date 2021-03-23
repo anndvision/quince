@@ -2,9 +2,6 @@ import ray
 import math
 import click
 
-from ray.tune.suggest.hyperopt import HyperOptSearch
-from ray.tune.schedulers import AsyncHyperBandScheduler
-
 from torch import cuda
 
 from pathlib import Path
