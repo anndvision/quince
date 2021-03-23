@@ -178,17 +178,6 @@ def evaluate(experiment_dir, output_dir, mc_samples):
             epistemic_uncertainty=True,
             lt=False if config["dataset_name"] == "ihdp" else True,
         )
-        for k, v in summary["policy_risk"]["risk"].items():
-            se = stats.sem(v)
-            h = se * stats.t.ppf((1 + 0.95) / 2.0, 20 - 1)
-            print(k, np.mean(v), h)
-        print("")
-        for k, v in summary["policy_risk"]["error"].items():
-            se = stats.sem(v)
-            h = se * stats.t.ppf((1 + 0.95) / 2.0, 20 - 1)
-            print(k, np.mean(v), h)
-        print("")
-
         if len(ds_train) <= 5000:
             update_summaries(
                 summary=summary_kernel,
@@ -198,16 +187,30 @@ def evaluate(experiment_dir, output_dir, mc_samples):
                 epistemic_uncertainty=False,
                 lt=False if config["dataset_name"] == "ihdp" else True,
             )
-            for k, v in summary_kernel["policy_risk"]["risk"].items():
-                se = stats.sem(v)
-                h = se * stats.t.ppf((1 + 0.95) / 2.0, 20 - 1)
-                print(k, np.mean(v), h)
-            print("")
-            for k, v in summary_kernel["policy_risk"]["error"].items():
-                se = stats.sem(v)
-                h = se * stats.t.ppf((1 + 0.95) / 2.0, 20 - 1)
-                print(k, np.mean(v), h)
-            print("")
+        i += 1
+
+    for k, v in summary["policy_risk"]["risk"].items():
+        se = stats.sem(v)
+        h = se * stats.t.ppf((1 + 0.95) / 2.0, 20 - 1)
+        print(k, np.mean(v), h)
+    print("")
+    for k, v in summary["policy_risk"]["error"].items():
+        se = stats.sem(v)
+        h = se * stats.t.ppf((1 + 0.95) / 2.0, 20 - 1)
+        print(k, np.mean(v), h)
+    print("")
+
+    if len(ds_train) <= 5000:
+        for k, v in summary_kernel["policy_risk"]["risk"].items():
+            se = stats.sem(v)
+            h = se * stats.t.ppf((1 + 0.95) / 2.0, 20 - 1)
+            print(k, np.mean(v), h)
+        print("")
+        for k, v in summary_kernel["policy_risk"]["error"].items():
+            se = stats.sem(v)
+            h = se * stats.t.ppf((1 + 0.95) / 2.0, 20 - 1)
+            print(k, np.mean(v), h)
+        print("")
 
     summary_path = output_dir / "summary.json"
     with summary_path.open(mode="w") as sp:
