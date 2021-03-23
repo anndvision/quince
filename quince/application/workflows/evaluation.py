@@ -55,164 +55,163 @@ def evaluate(experiment_dir, output_dir, mc_samples):
         summary["policy_risk"]["error"].update({k: []})
         summary_kernel["policy_risk"]["risk"].update({k: []})
         summary_kernel["policy_risk"]["error"].update({k: []})
-    i = 0
-    for trial_dir in sorted(experiment_dir.iterdir()):
-        if "trial" in trial_dir.parts[-1]:
-            config_path = trial_dir / "config.json"
-            with config_path.open(mode="r") as cp:
-                config = json.load(cp)
-            dataset_name = config.get("dataset_name")
-            ds_train = datasets.DATASETS.get(dataset_name)(**config.get("ds_train"))
-            outcome_ensemble, propensity_ensemble = build_ensemble(
-                config=config, experiment_dir=trial_dir, ds=ds_train
+    for i, trial_dir in enumerate(sorted(experiment_dir.iterdir())):
+        config_path = trial_dir / "config.json"
+        with config_path.open(mode="r") as cp:
+            config = json.load(cp)
+        dataset_name = config.get("dataset_name")
+        ds_train = datasets.DATASETS.get(dataset_name)(**config.get("ds_train"))
+        outcome_ensemble, propensity_ensemble = build_ensemble(
+            config=config, experiment_dir=trial_dir, ds=ds_train
+        )
+        ds_test = datasets.DATASETS.get(dataset_name)(**config.get("ds_test"))
+        intervals = get_intervals(
+            dataset=ds_test,
+            outcome_ensemble=outcome_ensemble,
+            propensity_ensemble=propensity_ensemble,
+            mc_samples_y=mc_samples,
+            file_path=trial_dir / "intervals.json",
+        )
+
+        if len(ds_train) <= 5000:
+            kr = models.KernelRegressor(
+                dataset=ds_train,
+                initial_length_scale=1.0,
+                feature_extractor=outcome_ensemble[0].encoder.encoder
+                if config["dataset_name"] == "hcmnist"
+                else None,
+                propensity_model=propensity_ensemble[0],
+                verbose=False,
             )
-            ds_test = datasets.DATASETS.get(dataset_name)(**config.get("ds_test"))
-            intervals = get_intervals(
+            ds_valid = datasets.DATASETS.get(dataset_name)(**config.get("ds_valid"))
+            kr.fit_length_scale(ds_valid, grid=np.arange(0.1, 3.0, 0.002))
+
+            intervals_kernel = get_intervals_kernel(
                 dataset=ds_test,
-                outcome_ensemble=outcome_ensemble,
-                propensity_ensemble=propensity_ensemble,
-                mc_samples_y=mc_samples,
-                file_path=trial_dir / "intervals.json",
+                model=kr,
+                file_path=trial_dir / "intervals_kernels.json",
             )
 
-            if len(ds_train) <= 5000:
-                kr = models.KernelRegressor(
-                    dataset=ds_train,
-                    initial_length_scale=1.0,
-                    feature_extractor=outcome_ensemble[0].encoder.encoder
-                    if config["dataset_name"] == "hcmnist"
-                    else None,
-                    propensity_model=propensity_ensemble[0],
-                    verbose=False,
+        tau_true = torch.tensor(ds_test.mu1 - ds_test.mu0).to("cpu")
+        p_density = output_dir / f"trial-{i:03d}" / "density"
+        p_density.mkdir(parents=True, exist_ok=True)
+        p_kernel = output_dir / f"trial-{i:03d}" / "kernel"
+        p_kernel.mkdir(parents=True, exist_ok=True)
+        if config["dataset_name"] == "ihdp":
+            plot_errorbars(intervals=intervals, tau_true=tau_true, output_dir=p_density)
+            plot_errorbars_kernel(
+                intervals=intervals_kernel, tau_true=tau_true, output_dir=p_kernel
+            )
+        elif config["dataset_name"] in ["synthetic", "hcmnist"]:
+            if config["dataset_name"] == "synthetic":
+                plot_fillbetween(
+                    intervals=intervals,
+                    ds_train=ds_train,
+                    ds_test=ds_test,
+                    output_dir=p_density,
                 )
-                ds_valid = datasets.DATASETS.get(dataset_name)(**config.get("ds_valid"))
-                kr.fit_length_scale(ds_valid, grid=np.arange(0.1, 3.0, 0.002))
-
-                intervals_kernel = get_intervals_kernel(
-                    dataset=ds_test,
-                    model=kr,
-                    file_path=trial_dir / "intervals_kernels.json",
+                plot_functions(
+                    intervals=intervals,
+                    ds_train=ds_train,
+                    ds_test=ds_test,
+                    output_dir=p_density,
                 )
-
-            tau_true = torch.tensor(ds_test.mu1 - ds_test.mu0).to("cpu")
-            p_density = output_dir / f"trial-{i:03d}" / "density"
-            p_density.mkdir(parents=True, exist_ok=True)
-            p_kernel = output_dir / f"trial-{i:03d}" / "kernel"
-            p_kernel.mkdir(parents=True, exist_ok=True)
-            if config["dataset_name"] == "ihdp":
+                plotting.rainbow(
+                    x=ds_train.x.ravel(),
+                    t=ds_train.t,
+                    domain=ds_test.x.ravel(),
+                    tau_true=(ds_test.mu1 - ds_test.mu0).ravel(),
+                    intervals=intervals,
+                    file_path=p_density / "rainbow.png",
+                )
+                if len(ds_train) <= 5000:
+                    plot_fillbetween(
+                        intervals=intervals_kernel,
+                        ds_train=ds_train,
+                        ds_test=ds_test,
+                        output_dir=p_kernel,
+                    )
+            else:
                 plot_errorbars(
                     intervals=intervals, tau_true=tau_true, output_dir=p_density
                 )
-                plot_errorbars_kernel(
-                    intervals=intervals_kernel, tau_true=tau_true, output_dir=p_kernel
+                plot_functions_mnist(
+                    intervals=intervals,
+                    ds_train=ds_train,
+                    ds_test=ds_test,
+                    output_dir=p_density,
                 )
-            elif config["dataset_name"] in ["synthetic", "hcmnist"]:
-                if config["dataset_name"] == "synthetic":
-                    plot_fillbetween(
-                        intervals=intervals,
-                        ds_train=ds_train,
-                        ds_test=ds_test,
-                        output_dir=p_density,
-                    )
-                    plot_functions(
-                        intervals=intervals,
-                        ds_train=ds_train,
-                        ds_test=ds_test,
-                        output_dir=p_density,
-                    )
-                    plotting.rainbow(
-                        x=ds_train.x.ravel(),
-                        t=ds_train.t,
-                        domain=ds_test.x.ravel(),
-                        tau_true=(ds_test.mu1 - ds_test.mu0).ravel(),
-                        intervals=intervals,
-                        file_path=p_density / "rainbow.png",
-                    )
-                    if len(ds_train) <= 5000:
-                        plot_fillbetween(
-                            intervals=intervals_kernel,
-                            ds_train=ds_train,
-                            ds_test=ds_test,
-                            output_dir=p_kernel,
-                        )
-                else:
-                    plot_errorbars(
-                        intervals=intervals, tau_true=tau_true, output_dir=p_density
-                    )
-                    plot_functions_mnist(
-                        intervals=intervals,
-                        ds_train=ds_train,
-                        ds_test=ds_test,
-                        output_dir=p_density,
-                    )
-            pi_true = (
-                tau_true >= 0.0 if config["dataset_name"] == "ihdp" else tau_true < 0.0
-            )
-            update_ignorance(
-                results=summary,
-                intervals=intervals,
-                tau_true=tau_true,
-                pi_true=pi_true,
-            )
+        pi_true = (
+            tau_true >= 0.0 if config["dataset_name"] == "ihdp" else tau_true < 0.0
+        )
+        update_ignorance(
+            results=summary,
+            intervals=intervals,
+            tau_true=tau_true,
+            pi_true=pi_true,
+        )
+        update_sensitivity(
+            results=summary,
+            intervals=intervals,
+            tau_true=tau_true,
+            pi_true=pi_true,
+        )
+        update_epistemic(
+            results=summary,
+            intervals=intervals,
+            tau_true=tau_true,
+            pi_true=pi_true,
+        )
+        if len(ds_train) <= 5000:
             update_sensitivity(
-                results=summary,
-                intervals=intervals,
+                results=summary_kernel,
+                intervals=intervals_kernel,
                 tau_true=tau_true,
                 pi_true=pi_true,
             )
-            update_epistemic(
-                results=summary,
-                intervals=intervals,
-                tau_true=tau_true,
-                pi_true=pi_true,
-            )
-            if len(ds_train) <= 5000:
-                update_sensitivity(
-                    results=summary_kernel,
-                    intervals=intervals_kernel,
-                    tau_true=tau_true,
-                    pi_true=pi_true,
-                )
 
+        update_summaries(
+            summary=summary,
+            dataset=ds_test,
+            intervals=intervals,
+            pi_true=pi_true.numpy().astype("float32"),
+            epistemic_uncertainty=False,
+            lt=False if config["dataset_name"] == "ihdp" else True,
+        )
+
+        if len(ds_train) <= 5000:
             update_summaries(
-                summary=summary,
+                summary=summary_kernel,
                 dataset=ds_test,
-                intervals=intervals,
+                intervals=intervals_kernel,
                 pi_true=pi_true.numpy().astype("float32"),
-                epistemic_uncertainty=True,
+                epistemic_uncertainty=False,
                 lt=False if config["dataset_name"] == "ihdp" else True,
             )
-            for k, v in summary["policy_risk"]["risk"].items():
-                se = stats.sem(v)
-                h = se * stats.t.ppf((1 + 0.95) / 2.0, 20 - 1)
-                print(k, np.mean(v), h)
-            print("")
-            for k, v in summary["policy_risk"]["error"].items():
-                se = stats.sem(v)
-                h = se * stats.t.ppf((1 + 0.95) / 2.0, 20 - 1)
-                print(k, np.mean(v), h)
-            print("")
+        i += 1
 
-            if len(ds_train) <= 5000:
-                update_summaries(
-                    summary=summary_kernel,
-                    dataset=ds_test,
-                    intervals=intervals_kernel,
-                    pi_true=pi_true.numpy().astype("float32"),
-                    epistemic_uncertainty=False,
-                    lt=False if config["dataset_name"] == "ihdp" else True,
-                )
-                for k, v in summary_kernel["policy_risk"]["risk"].items():
-                    se = stats.sem(v)
-                    h = se * stats.t.ppf((1 + 0.95) / 2.0, 20 - 1)
-                    print(k, np.mean(v), h)
-                print("")
-                for k, v in summary_kernel["policy_risk"]["error"].items():
-                    se = stats.sem(v)
-                    h = se * stats.t.ppf((1 + 0.95) / 2.0, 20 - 1)
-                    print(k, np.mean(v), h)
-                print("")
-            i += 1
+    for k, v in summary["policy_risk"]["risk"].items():
+        se = stats.sem(v)
+        h = se * stats.t.ppf((1 + 0.95) / 2.0, 20 - 1)
+        print(k, np.mean(v), h)
+    print("")
+    for k, v in summary["policy_risk"]["error"].items():
+        se = stats.sem(v)
+        h = se * stats.t.ppf((1 + 0.95) / 2.0, 20 - 1)
+        print(k, np.mean(v), h)
+    print("")
+
+    if len(ds_train) <= 5000:
+        for k, v in summary_kernel["policy_risk"]["risk"].items():
+            se = stats.sem(v)
+            h = se * stats.t.ppf((1 + 0.95) / 2.0, 20 - 1)
+            print(k, np.mean(v), h)
+        print("")
+        for k, v in summary_kernel["policy_risk"]["error"].items():
+            se = stats.sem(v)
+            h = se * stats.t.ppf((1 + 0.95) / 2.0, 20 - 1)
+            print(k, np.mean(v), h)
+        print("")
 
     summary_path = output_dir / "summary.json"
     with summary_path.open(mode="w") as sp:
