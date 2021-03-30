@@ -1,10 +1,10 @@
-# quince
+# :pear: quince
 
 Code for [Quantifying Ignorance in Individual-Level Causal-Effect Estimates under Hidden Confounding](https://arxiv.org/abs/2103.04850)
 
 ![Image of Gamma Sweep](assets/gamma-sweep.gif)
 
-## Installation
+## :pear: Installation
 
 ```.bash
 $ git clone git@github.com:anndvision/quince.git
@@ -13,7 +13,7 @@ $ conda env create -f environment.yml
 $ conda activate quince
 ```
 
-## Example: Replicating IHDP results
+## :pear: Example: Replicating IHDP results
 
 ### Step 1: Hyperparameter Tuning (optional)
 
@@ -65,7 +65,7 @@ $ quince \
         --mc-samples 100 \
 ```
 
-## Replicating Other Results
+## :pear: Replicating Other Results
 
 ### Simulated Data
 
