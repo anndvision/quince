@@ -1,4 +1,4 @@
-# :pear: quince
+# quince :pear:
 
 Code for [Quantifying Ignorance in Individual-Level Causal-Effect Estimates under Hidden Confounding](https://arxiv.org/abs/2103.04850)
 
