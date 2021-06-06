@@ -53,17 +53,19 @@ def hyper_tune(config):
         "num_components": tune.choice([1, 2, 3, 4, 5]),
         "negative_slope": tune.choice([0.0, 0.1, 0.2, 0.3, 0.4, 0.5, -1.0]),
         "dropout_rate": tune.choice([0.0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.5]),
-        "spectral_norm": tune.choice([0.95, 1.0, 1.5, 3.0, 6.0, 12.0, 24.0]),
-        "learning_rate": tune.choice([5e-5, 1e-4, 2e-4, 5e-4, 1e-3]),
+        "spectral_norm": tune.choice([0.0, 0.95, 1.0, 1.5, 3.0, 6.0]),
+        "learning_rate": tune.choice([2e-4, 5e-4, 1e-3]),
         "batch_size": tune.choice([16, 32, 64, 100, 200]),
     }
     algorithm = hyperopt.HyperOptSearch(
         space,
         metric="mean_loss",
         mode="min",
-        n_initial_points=20,
+        n_initial_points=100,
     )
-    scheduler = schedulers.AsyncHyperBandScheduler(grace_period=10)
+    scheduler = schedulers.AsyncHyperBandScheduler(
+        grace_period=50, max_t=config.get("epochs")
+    )
     analysis = tune.run(
         run_or_experiment=tune_desity_estimator,
         metric="mean_loss",
