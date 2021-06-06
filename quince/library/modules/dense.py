@@ -1,5 +1,3 @@
-import torch
-
 from torch import nn
 
 from quince.library.modules.spectral_norm import spectral_norm_fc

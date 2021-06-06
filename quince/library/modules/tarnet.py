@@ -4,6 +4,7 @@ from torch import nn
 
 from quince.library.modules import dense
 from quince.library.modules import convolution
+from quince.library.modules import variational
 
 
 class TARNet(nn.Module):
@@ -12,7 +13,7 @@ class TARNet(nn.Module):
         architecture,
         dim_input,
         dim_hidden,
-        dim_treatment,
+        dim_output,
         depth,
         negative_slope,
         batch_norm,
@@ -34,6 +35,7 @@ class TARNet(nn.Module):
                 stem_kernel_stride=1,
                 stem_kernel_padding=2,
                 stem_pool=False,
+                activate_output=False,
             )
             if isinstance(dim_input, list)
             else dense.NeuralNetwork(
@@ -48,10 +50,10 @@ class TARNet(nn.Module):
                 activate_output=False,
             )
         )
-        self.t_encoder = nn.Sequential(
+        self.t0_encoder = nn.Sequential(
             dense.ResidualDense(
-                dim_input=self.encoder.dim_output + dim_treatment,
-                dim_output=dim_hidden,
+                dim_input=self.encoder.dim_output,
+                dim_output=dim_hidden // 2,
                 bias=not batch_norm,
                 negative_slope=negative_slope,
                 dropout_rate=dropout_rate,
@@ -59,8 +61,8 @@ class TARNet(nn.Module):
                 spectral_norm=spectral_norm,
             ),
             dense.ResidualDense(
-                dim_input=dim_hidden,
-                dim_output=dim_hidden,
+                dim_input=dim_hidden // 2,
+                dim_output=dim_hidden // 2,
                 bias=not batch_norm,
                 negative_slope=negative_slope,
                 dropout_rate=dropout_rate,
@@ -68,15 +70,45 @@ class TARNet(nn.Module):
                 spectral_norm=spectral_norm,
             ),
             dense.Activation(
-                dim_input=dim_hidden,
+                dim_input=dim_hidden // 2,
                 negative_slope=negative_slope,
                 dropout_rate=dropout_rate,
                 batch_norm=batch_norm,
             ),
         )
-        self.dim_output = dim_hidden
+        self.t1_encoder = nn.Sequential(
+            dense.ResidualDense(
+                dim_input=self.encoder.dim_output,
+                dim_output=dim_hidden // 2,
+                bias=not batch_norm,
+                negative_slope=negative_slope,
+                dropout_rate=dropout_rate,
+                batch_norm=batch_norm,
+                spectral_norm=spectral_norm,
+            ),
+            dense.ResidualDense(
+                dim_input=dim_hidden // 2,
+                dim_output=dim_hidden // 2,
+                bias=not batch_norm,
+                negative_slope=negative_slope,
+                dropout_rate=dropout_rate,
+                batch_norm=batch_norm,
+                spectral_norm=spectral_norm,
+            ),
+            dense.Activation(
+                dim_input=dim_hidden // 2,
+                negative_slope=negative_slope,
+                dropout_rate=dropout_rate,
+                batch_norm=batch_norm,
+            ),
+        )
+        self.dim_output = dim_hidden // 2
+        self.density = variational.SplitGMM(
+            dim_input=dim_hidden // 2, dim_output=dim_output
+        )
 
     def forward(self, inputs):
         phi = self.encoder(inputs[:, :-1])
-        t_inputs = torch.cat([phi, inputs[:, -1:]], dim=-1)
-        return self.t_encoder(t_inputs)
+        t = inputs[:, -1:]
+        phi = (1 - t) * self.t0_encoder(phi) + t * self.t1_encoder(phi)
+        return self.density(torch.cat([phi, t], dim=-1))
