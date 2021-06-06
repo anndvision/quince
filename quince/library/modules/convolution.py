@@ -1,7 +1,6 @@
-from typing import List
-import torch
-
 from torch import nn
+
+from typing import List
 
 from quince.library.modules.spectral_norm import spectral_norm_conv
 
@@ -156,7 +155,7 @@ class ResNet(nn.Module):
         stem_kernel_stride: int = 2,
         stem_kernel_padding: int = 3,
         stem_pool: bool = True,
-        output_activation=False,
+        activate_output=False,
     ):
         super(ResNet, self).__init__()
         self.dim_input = dim_input
@@ -212,7 +211,7 @@ class ResNet(nn.Module):
             dy = round(1 + (dy + 2 - 3) / 2)
         self.op.add_module("average_pooling", nn.AdaptiveAvgPool2d((1, 1)))
         self.dim_output = base_width * 2 ** (len(layers) - 1)
-        if output_activation:
+        if activate_output:
             self.op.add_module(
                 "output_activation",
                 Activation(

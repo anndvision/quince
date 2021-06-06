@@ -1,7 +1,6 @@
 """
 Spectral Normalization from https://arxiv.org/abs/1802.05957
 with additional variable `coeff` or max spectral norm.
-
 From: https://github.com/jhjacobsen/invertible-resnet
 Which is based on: https://arxiv.org/abs/1811.00995
 Soft Spectral Normalization (not enforced, only <= coeff) for Conv2D layers
@@ -10,13 +9,13 @@ Based on: Regularisation of Neural Networks by Enforcing Lipschitz Continuity
     https://arxiv.org/abs/1804.04368
 """
 import torch
-from torch.nn.functional import normalize, conv_transpose2d, conv2d
+from torch import nn
+from torch.nn.functional import normalize, conv2d, conv_transpose2d
 from torch.nn.utils.spectral_norm import (
     SpectralNorm,
     SpectralNormLoadStateDictPreHook,
     SpectralNormStateDictHook,
 )
-from torch import nn
 
 
 class SpectralNormFC(SpectralNorm):

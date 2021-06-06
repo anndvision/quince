@@ -1,8 +1,8 @@
 import os
+import copy
 import torch
 
 from abc import ABC
-from shutil import copyfile
 
 from ray import tune
 
@@ -12,6 +12,8 @@ from ignite import distributed
 
 from torch.utils import data
 from torch.utils import tensorboard
+
+from quince.library import datasets
 
 
 class BaseModel(ABC):
@@ -25,12 +27,12 @@ class BaseModel(ABC):
             "Classes that inherit from BaseModel must implement train()"
         )
 
-    def save(self, is_best):
+    def save(self):
         raise NotImplementedError(
             "Classes that inherit from BaseModel must implement save()"
         )
 
-    def load(self, load_best):
+    def load(self):
         raise NotImplementedError(
             "Classes that inherit from BaseModel must implement load()"
         )
@@ -53,6 +55,8 @@ class PyTorchModel(BaseModel):
         self._metrics = None
         self.num_workers = num_workers
         self.device = distributed.device()
+        self.best_state = None
+        self.counter = 0
 
     @property
     def network(self):
@@ -84,12 +88,6 @@ class PyTorchModel(BaseModel):
     def tune_step(self, trainer, batch):
         raise NotImplementedError()
 
-    def on_epoch_completed(self, trainer, train_loader, tune_loader):
-        raise NotImplementedError()
-
-    def on_training_completed(self, trainer, loader):
-        raise NotImplementedError()
-
     def preprocess(self, batch):
         inputs, targets = batch
         inputs = (
@@ -108,15 +106,16 @@ class PyTorchModel(BaseModel):
         train_loader = data.DataLoader(
             train_dataset,
             batch_size=self.batch_size,
-            shuffle=True,
+            sampler=datasets.RandomFixedLengthSampler(
+                train_dataset, 10 * self.batch_size
+            ),
             drop_last=True,
+            pin_memory=True,
             num_workers=self.num_workers,
         )
         tune_loader = data.DataLoader(
             tune_dataset,
             batch_size=self.batch_size,
-            shuffle=False,
-            drop_last=False,
             num_workers=self.num_workers,
         )
         # Instantiate trainer
@@ -132,30 +131,70 @@ class PyTorchModel(BaseModel):
         self.trainer.add_event_handler(
             engine.Events.COMPLETED, self.on_training_completed, tune_loader
         )
-        self.load(load_best=False)
         # Train
         self.trainer.run(train_loader, max_epochs=self.epochs)
         return self.evaluator.state.metrics
 
-    def save(self, is_best):
-        state = {
-            "model": self.network.state_dict(),
-            "optimizer": self.optimizer.state_dict(),
-            "engine": self.trainer.state,
-        }
+    def on_epoch_completed(self, engine, train_loader, tune_loader):
+        train_metrics = self.trainer.state.metrics
+        print("Metrics Epoch", engine.state.epoch)
+        justify = max(len(k) for k in train_metrics) + 2
+        for k, v in train_metrics.items():
+            if type(v) == float:
+                print("train {:<{justify}} {:<5f}".format(k, v, justify=justify))
+                continue
+            print("train {:<{justify}} {:<5}".format(k, v, justify=justify))
+        self.evaluator.run(tune_loader)
+        tune_metrics = self.evaluator.state.metrics
+        if tune.is_session_enabled():
+            tune.report(mean_loss=tune_metrics["loss"])
+        justify = max(len(k) for k in tune_metrics) + 2
+        for k, v in tune_metrics.items():
+            if type(v) == float:
+                print("tune {:<{justify}} {:<5f}".format(k, v, justify=justify))
+                continue
+        if tune_metrics["loss"] < self.best_loss:
+            self.best_loss = tune_metrics["loss"]
+            self.counter = 0
+            self.update()
+        else:
+            self.counter += 1
+        if self.counter == self.patience:
+            self.logger.info(
+                "Early Stopping: No improvement for {} epochs".format(self.patience)
+            )
+            engine.terminate()
 
+    def on_training_completed(self, engine, loader):
+        self.save()
+        self.load()
+        self.evaluator.run(loader)
+        metric_values = self.evaluator.state.metrics
+        print("Metrics Epoch", engine.state.epoch)
+        justify = max(len(k) for k in metric_values) + 2
+        for k, v in metric_values.items():
+            if type(v) == float:
+                print("best {:<{justify}} {:<5f}".format(k, v, justify=justify))
+                continue
+
+    def update(self):
         if not tune.is_session_enabled():
-            p = os.path.join(self.job_dir, "checkpoint.pt")
-            torch.save(state, p)
-            if is_best:
-                copyfile(p, os.path.join(self.job_dir, "best_checkpoint.pt"))
+            self.best_state = {
+                "model": copy.deepcopy(self.network.state_dict()),
+                "optimizer": copy.deepcopy(self.optimizer.state_dict()),
+                "engine": copy.copy(self.trainer.state),
+            }
 
-    def load(self, load_best=False):
+    def save(self):
+        p = os.path.join(self.job_dir, "best_checkpoint.pt")
+        torch.save(self.best_state, p)
+
+    def load(self):
         if tune.is_session_enabled():
             with tune.checkpoint_dir(step=self.trainer.state.epoch) as checkpoint_dir:
                 p = os.path.join(checkpoint_dir, "checkpoint.pt")
         else:
-            file_name = "best_checkpoint.pt" if load_best else "checkpoint.pt"
+            file_name = "best_checkpoint.pt"
             p = os.path.join(self.job_dir, file_name)
         if not os.path.exists(p):
             self.logger.info(
