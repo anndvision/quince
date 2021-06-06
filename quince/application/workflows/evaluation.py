@@ -202,6 +202,14 @@ def evaluate(experiment_dir, output_dir, mc_samples):
     print("")
 
     if len(ds_train) <= 5000:
+        print("Paired t-test")
+        for k in summary["policy_risk"]["risk"].keys():
+            v_density = np.asarray(summary["policy_risk"]["risk"][k])
+            v_kernel = np.asarray(summary_kernel["policy_risk"]["risk"][k])
+            statistic, pvalue = stats.ttest_rel(v_density, v_kernel)
+            print(k, f"{statistic:.06f}", f"{pvalue:.06f}")
+        print("")
+
         for k, v in summary_kernel["policy_risk"]["risk"].items():
             se = stats.sem(v)
             h = se * stats.t.ppf((1 + 0.95) / 2.0, 20 - 1)
