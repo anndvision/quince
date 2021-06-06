@@ -6,7 +6,7 @@ from quince.library import models
 from quince.library import datasets
 
 
-def tune_desity_estimator(config):
+def tune_tarnet(config):
     dataset_name = config.get("dataset_name")
     ds_train = datasets.DATASETS.get(dataset_name)(**config.get("ds_train"))
     ds_valid = datasets.DATASETS.get(dataset_name)(**config.get("ds_valid"))
@@ -21,11 +21,10 @@ def tune_desity_estimator(config):
     batch_size = config.get("batch_size")
     epochs = config.get("epochs")
 
-    outcome_model = models.GaussianMixtureDensityNetwork(
+    outcome_model = models.TARNet(
         job_dir=None,
         architecture="resnet",
         dim_input=ds_train.dim_input,
-        dim_treatment=ds_train.dim_treatment,
         dim_hidden=dim_hidden,
         dim_output=dim_output,
         depth=depth,
@@ -38,7 +37,7 @@ def tune_desity_estimator(config):
         batch_size=batch_size,
         epochs=epochs,
         patience=10,
-        num_workers=8,
+        num_workers=0,
         seed=config.get("seed"),
     )
     _ = outcome_model.fit(ds_train, ds_valid)
@@ -67,7 +66,7 @@ def hyper_tune(config):
         grace_period=50, max_t=config.get("epochs")
     )
     analysis = tune.run(
-        run_or_experiment=tune_desity_estimator,
+        run_or_experiment=tune_tarnet,
         metric="mean_loss",
         mode="min",
         name="hyperopt_density_estimator",
