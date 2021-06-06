@@ -5,7 +5,7 @@ from quince.library import models
 from quince.library import datasets
 
 
-def density_network_trainer(
+def ensemble_trainer(
     config,
     experiment_dir,
     trial,
@@ -41,11 +41,10 @@ def density_network_trainer(
 
     out_dir = experiment_dir / "checkpoints" / f"model-{ensemble_id}" / "mu"
     if not (out_dir / "best_checkpoint.pt").exists():
-        outcome_model = models.GaussianMixtureDensityNetwork(
+        outcome_model = models.TARNet(
             job_dir=out_dir,
             architecture="resnet",
             dim_input=ds_train.dim_input,
-            dim_treatment=ds_train.dim_treatment,
             dim_hidden=dim_hidden,
             dim_output=dim_output,
             depth=depth,
@@ -58,7 +57,7 @@ def density_network_trainer(
             batch_size=batch_size,
             epochs=epochs,
             patience=10,
-            num_workers=8,
+            num_workers=0,
             seed=ensemble_id,
         )
         _ = outcome_model.fit(ds_train, ds_valid)
@@ -72,11 +71,10 @@ def density_network_trainer(
 
     out_dir = experiment_dir / "checkpoints" / f"model-{ensemble_id}" / "pi"
     if not (out_dir / "best_checkpoint.pt").exists():
-        propensity_model = models.CategoricalDensityNetwork(
+        propensity_model = models.NeuralNetwork(
             job_dir=out_dir,
             architecture="resnet",
             dim_input=ds_train.dim_input,
-            dim_treatment=0,
             dim_hidden=dim_hidden,
             dim_output=ds_train.dim_treatment,
             depth=depth,
@@ -89,7 +87,7 @@ def density_network_trainer(
             batch_size=batch_size,
             epochs=epochs,
             patience=10,
-            num_workers=8,
+            num_workers=0,
             seed=ensemble_id,
         )
         _ = propensity_model.fit(ds_train, ds_valid)
