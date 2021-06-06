@@ -426,7 +426,7 @@ def synthetic(
     )
 
 
-@cli.command("density-network")
+@cli.command("ensemble")
 @click.pass_context
 @click.option("--dim-hidden", default=400, type=int, help="num neurons")
 @click.option("--num-components", default=5, type=int, help="num mixture components")
@@ -467,7 +467,7 @@ def synthetic(
     default=10,
     help="number of models in ensemble, default=1",
 )
-def density_network(
+def ensemble(
     context,
     dim_hidden,
     num_components,
@@ -509,7 +509,7 @@ def density_network(
             num_cpus=context.obj.get("cpu_per_trial"),
         )
         def trainer(**kwargs):
-            func = workflows.training.density_network_trainer(**kwargs)
+            func = workflows.training.ensemble_trainer(**kwargs)
             return func
 
         results = []
