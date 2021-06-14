@@ -5,14 +5,16 @@ import matplotlib.pyplot as plt
 sns.set(style="whitegrid", palette="colorblind")
 params = {
     "figure.constrained_layout.use": True,
-    "axes.labelsize": 24,
-    "xtick.labelsize": 18,
-    "ytick.labelsize": 18,
-    "legend.fontsize": 22,
-    "legend.title_fontsize": 22,
-    "font.size": 24,
+    "axes.labelsize": 18,
+    "xtick.labelsize": 12,
+    "ytick.labelsize": 12,
+    "legend.fontsize": 18,
+    "legend.title_fontsize": 18,
+    "font.size": 18,
 }
 plt.rcParams.update(params)
+
+_FUNCTION_COLOR = "#ad8bd6"
 
 
 def fill_between(
@@ -31,7 +33,7 @@ def fill_between(
 ):
     _ = plt.figure(figsize=(682 / 72, 512 / 72), dpi=72)
     for k, v in y.items():
-        _ = plt.plot(x, v["mean"], lw=8, c=v["color"], ls=v["line_style"], label=k)
+        _ = plt.plot(x, v["mean"], c=v["color"], ls=v["line_style"], label=k)
         _ = plt.fill_between(
             x,
             v["mean"] - v["ci"],
@@ -99,26 +101,50 @@ def pretty_interval(
     legend_loc=None,
     file_path=None,
 ):
-    legend_loc = (0.07, 0.55) if legend_loc is None else legend_loc
+    fig, ax = plt.subplots(
+        2,
+        1,
+        figsize=(482 / 72, 512 / 72),
+        dpi=300,
+        gridspec_kw={"height_ratios": [1, 3]},
+    )
+    density_axis = ax[0]
+    data_axis = ax[1]
+    control_color = "C0"
+    treatment_color = "C4"
+
+    _ = sns.histplot(
+        x=x[t == 0].ravel(),
+        bins=64,
+        color=control_color,
+        fill=True,
+        alpha=0.5,
+        label=r"$p_{\mathcal{D}}(\mathbf{x} | \mathrm{t}=0)$",
+        ax=density_axis,
+        stat="density",
+    )
+    _ = sns.histplot(
+        x=x[t == 1].ravel(),
+        bins=64,
+        color=treatment_color,
+        fill=True,
+        alpha=0.5,
+        label=r"$p_{\mathcal{D}}(\mathbf{x} | \mathrm{t}=1)$",
+        ax=density_axis,
+        stat="density",
+    )
+    _ = density_axis.tick_params(
+        axis="x", which="both", left=False, right=False, labelbottom=False
+    )
+    _ = density_axis.set_ylabel("")
+    _ = density_axis.set_xlim([-3.5, 3.5])
+    _ = density_axis.legend(loc="upper left")
+
     tau_top = 1.5 * (tau_top / tau_true.max())
     tau_bottom = 1.5 * (tau_bottom / tau_true.max())
     tau_mean = 1.5 * (tau_mean / tau_true.max())
     tau_true = 1.5 * (tau_true / tau_true.max())
-    _ = plt.figure(figsize=(682 / 72, 512 / 72), dpi=72)
-    _ = plt.hist(
-        [x[t == 0], x[t == 1]],
-        bins=50,
-        density=True,
-        alpha=0.4,
-        hatch="X",
-        stacked=True,
-        label=[
-            "$p_{\mathcal{D}}(\mathbf{x}, \mathrm{t}=0)$",
-            "$p_{\mathcal{D}}(\mathbf{x}, \mathrm{t}=1)$",
-        ],
-        color=["C0", "C1"],
-    )
-    _ = plt.plot(
+    _ = data_axis.plot(
         domain,
         tau_true,
         color="black",
@@ -126,29 +152,26 @@ def pretty_interval(
         ls=":",
         label=r"$\tau(\mathbf{x})$",
     )
-    _ = plt.fill_between(
+    _ = data_axis.fill_between(
         domain,
         tau_top,
         tau_bottom,
-        color="C6",
+        color=_FUNCTION_COLOR,
         alpha=0.5,
         label=r"$\widehat{\tau}(\mathbf{x})$ range",
     )
-    _ = plt.plot(
+    _ = data_axis.plot(
         domain,
         tau_mean,
-        color="C0",
-        lw=5,
+        color=_FUNCTION_COLOR,
         ls="-",
         alpha=1.0,
-        label=r"$\widehat{\tau}(\mathbf{x})$ biased",
+        label=r"$\widehat{\tau}(\mathbf{x})$",
     )
-    _ = plt.xlabel(r"$\mathbf{x}$")
-    _ = plt.ylim([-1.15, 1.6])
-    _ = plt.xlim([-3.8, 3.5])
-    _ = plt.tick_params(axis="x", direction="in", pad=-20)
-    _ = plt.tick_params(axis="y", direction="in", pad=-45)
-    _ = plt.legend(loc=legend_loc, title=legend_title)
+    _ = data_axis.set_xlabel(r"$\mathbf{x}$")
+    _ = data_axis.set_ylim([-1.5, 1.8])
+    _ = data_axis.set_xlim([-3.5, 3.5])
+    _ = data_axis.legend(loc="upper left")
     _ = plt.savefig(file_path, dpi=300)
     _ = plt.close()
 
@@ -161,23 +184,48 @@ def functions(
     tau_mean,
     file_path=None,
 ):
+    fig, ax = plt.subplots(
+        2,
+        1,
+        figsize=(482 / 72, 512 / 72),
+        dpi=300,
+        gridspec_kw={"height_ratios": [1, 3]},
+    )
+    density_axis = ax[0]
+    data_axis = ax[1]
+    control_color = "C0"
+    treatment_color = "C4"
+
+    _ = sns.histplot(
+        x=x[t == 0].ravel(),
+        bins=64,
+        color=control_color,
+        fill=True,
+        alpha=0.5,
+        label=r"$p_{\mathcal{D}}(\mathbf{x} | \mathrm{t}=0)$",
+        ax=density_axis,
+        stat="density",
+    )
+    _ = sns.histplot(
+        x=x[t == 1].ravel(),
+        bins=64,
+        color=treatment_color,
+        fill=True,
+        alpha=0.5,
+        label=r"$p_{\mathcal{D}}(\mathbf{x} | \mathrm{t}=1)$",
+        ax=density_axis,
+        stat="density",
+    )
+    _ = density_axis.tick_params(
+        axis="x", which="both", left=False, right=False, labelbottom=False
+    )
+    _ = density_axis.set_ylabel("")
+    _ = density_axis.set_xlim([-3.5, 3.5])
+    _ = density_axis.legend(loc="upper left")
+
     tau_mean = 1.5 * (tau_mean / tau_true.max())
     tau_true = 1.5 * (tau_true / tau_true.max())
-    _ = plt.figure(figsize=(682 / 72, 512 / 72), dpi=72)
-    _ = plt.hist(
-        [x[t == 0], x[t == 1]],
-        bins=50,
-        density=True,
-        alpha=0.4,
-        hatch="X",
-        stacked=True,
-        label=[
-            "$p_{\mathcal{D}}(\mathbf{x}, \mathrm{t}=0)$",
-            "$p_{\mathcal{D}}(\mathbf{x}, \mathrm{t}=1)$",
-        ],
-        color=["C0", "C1"],
-    )
-    _ = plt.plot(
+    _ = data_axis.plot(
         domain,
         tau_true,
         color="black",
@@ -185,51 +233,75 @@ def functions(
         ls=":",
         label=r"$\tau(\mathbf{x})$",
     )
-    _ = plt.plot(
+    _ = data_axis.plot(
         domain,
         tau_mean.mean(0),
-        color="C0",
+        color=_FUNCTION_COLOR,
         lw=1,
         ls="-",
         alpha=1.0,
         label=r"$\widehat{\tau}_{\mathbf{\omega}}(\mathbf{x})$, $\mathbf{\omega} \sim q(\mathbf{\omega} \mid \mathcal{D})$",
     )
-    _ = plt.plot(
+    _ = data_axis.plot(
         domain,
         tau_mean.transpose(1, 0),
-        color="C0",
+        color=_FUNCTION_COLOR,
         lw=1,
         ls="-",
         alpha=0.5,
     )
-    _ = plt.xlabel(r"$\mathbf{x}$")
-    _ = plt.ylim([-1.15, 1.6])
-    _ = plt.xlim([-3.8, 3.5])
-    _ = plt.tick_params(axis="x", direction="in", pad=-20)
-    _ = plt.tick_params(axis="y", direction="in", pad=-45)
-    _ = plt.legend(loc=(0.07, 0.68))
+    _ = data_axis.set_xlabel(r"$\mathbf{x}$")
+    _ = data_axis.set_ylim([-1.5, 1.8])
+    _ = data_axis.set_xlim([-3.5, 3.5])
+    _ = data_axis.legend(loc="upper left")
     _ = plt.savefig(file_path, dpi=300)
     _ = plt.close()
 
 
 def rainbow(x, t, domain, tau_true, intervals, file_path):
+    fig, ax = plt.subplots(
+        2,
+        1,
+        figsize=(482 / 72, 512 / 72),
+        dpi=300,
+        gridspec_kw={"height_ratios": [1, 3]},
+    )
+    density_axis = ax[0]
+    data_axis = ax[1]
+    control_color = "C0"
+    treatment_color = "C4"
+
     indices = np.argsort(domain)
     tau = 1.5 * (tau_true / tau_true.max())
-    _ = plt.figure(figsize=(682 / 72, 512 / 72), dpi=72)
-    _ = plt.hist(
-        [x[t == 0], x[t == 1]],
-        bins=50,
-        density=True,
-        alpha=0.4,
-        hatch="X",
-        stacked=True,
-        label=[
-            "$p_{\mathcal{D}}(\mathbf{x}, \mathrm{t}=0)$",
-            "$p_{\mathcal{D}}(\mathbf{x}, \mathrm{t}=1)$",
-        ],
-        color=["C0", "C1"],
+
+    _ = sns.histplot(
+        x=x[t == 0].ravel(),
+        bins=64,
+        color=control_color,
+        fill=True,
+        alpha=0.5,
+        label=r"$p_{\mathcal{D}}(\mathbf{x} | \mathrm{t}=0)$",
+        ax=density_axis,
+        stat="density",
     )
-    _ = plt.plot(
+    _ = sns.histplot(
+        x=x[t == 1].ravel(),
+        bins=64,
+        color=treatment_color,
+        fill=True,
+        alpha=0.5,
+        label=r"$p_{\mathcal{D}}(\mathbf{x} | \mathrm{t}=1)$",
+        ax=density_axis,
+        stat="density",
+    )
+    _ = density_axis.tick_params(
+        axis="x", which="both", left=False, right=False, labelbottom=False
+    )
+    _ = density_axis.set_ylabel("")
+    _ = density_axis.set_xlim([-3.5, 3.5])
+    _ = density_axis.legend(loc="upper left")
+
+    _ = data_axis.plot(
         domain[indices],
         tau[indices],
         color="black",
@@ -237,71 +309,68 @@ def rainbow(x, t, domain, tau_true, intervals, file_path):
         ls=":",
         label=r"$\tau(\mathbf{x})$",
     )
-    _ = plt.plot(
+    _ = data_axis.plot(
         domain[indices],
-        1.5 * (intervals["0.00"]["mean"].mean(0)[indices] / tau_true.max()),
-        color="C0",
-        lw=6,
+        1.5 * (intervals["0.0"]["mean"].mean(0)[indices] / tau_true.max()),
+        color=_FUNCTION_COLOR,
         ls="-",
         alpha=1.0,
         label=r"$\Gamma=1.0$",
     )
-    _ = plt.fill_between(
+    _ = data_axis.fill_between(
         domain[indices],
-        1.5 * (intervals["0.50"]["top"].mean(0)[indices] / tau_true.max()),
-        1.5 * (intervals["0.00"]["mean"].mean(0)[indices] / tau_true.max()),
-        color="C4",
-        alpha=0.5,
-        hatch="///",
+        1.5 * (intervals["0.5"]["top"].mean(0)[indices] / tau_true.max()),
+        1.5 * (intervals["0.0"]["mean"].mean(0)[indices] / tau_true.max()),
+        color=_FUNCTION_COLOR,
+        alpha=0.4,
+        hatch="\\",
         label=r"$\Gamma=1.7$",
     )
-    _ = plt.fill_between(
+    _ = data_axis.fill_between(
         domain[indices],
-        1.5 * (intervals["0.00"]["mean"].mean(0)[indices] / tau_true.max()),
-        1.5 * (intervals["0.50"]["bottom"].mean(0)[indices] / tau_true.max()),
-        color="C4",
-        hatch="///",
-        alpha=0.5,
+        1.5 * (intervals["0.0"]["mean"].mean(0)[indices] / tau_true.max()),
+        1.5 * (intervals["0.5"]["bottom"].mean(0)[indices] / tau_true.max()),
+        color=_FUNCTION_COLOR,
+        hatch="\\",
+        alpha=0.4,
     )
-    _ = plt.fill_between(
+    _ = data_axis.fill_between(
         domain[indices],
-        1.5 * (intervals["1.00"]["top"].mean(0)[indices] / tau_true.max()),
-        1.5 * (intervals["0.50"]["top"].mean(0)[indices] / tau_true.max()),
-        color="C9",
-        alpha=0.5,
-        hatch="//",
+        1.5 * (intervals["1.0"]["top"].mean(0)[indices] / tau_true.max()),
+        1.5 * (intervals["0.5"]["top"].mean(0)[indices] / tau_true.max()),
+        color=_FUNCTION_COLOR,
+        alpha=0.6,
+        hatch="/",
         label=r"$\Gamma=2.7$",
     )
-    _ = plt.fill_between(
+    _ = data_axis.fill_between(
         domain[indices],
-        1.5 * (intervals["0.50"]["bottom"].mean(0)[indices] / tau_true.max()),
-        1.5 * (intervals["1.00"]["bottom"].mean(0)[indices] / tau_true.max()),
-        color="C9",
-        hatch="//",
-        alpha=0.5,
-    )
-    _ = plt.fill_between(
-        domain[indices],
-        1.5 * (intervals["1.50"]["top"].mean(0)[indices] / tau_true.max()),
-        1.5 * (intervals["1.00"]["top"].mean(0)[indices] / tau_true.max()),
-        color="C6",
-        alpha=0.5,
+        1.5 * (intervals["0.5"]["bottom"].mean(0)[indices] / tau_true.max()),
+        1.5 * (intervals["1.0"]["bottom"].mean(0)[indices] / tau_true.max()),
+        color=_FUNCTION_COLOR,
         hatch="/",
+        alpha=0.6,
+    )
+    _ = data_axis.fill_between(
+        domain[indices],
+        1.5 * (intervals["1.5"]["top"].mean(0)[indices] / tau_true.max()),
+        1.5 * (intervals["1.0"]["top"].mean(0)[indices] / tau_true.max()),
+        color=_FUNCTION_COLOR,
+        alpha=0.2,
+        hatch="|",
         label=r"$\Gamma=4.5$",
     )
-    _ = plt.fill_between(
+    _ = data_axis.fill_between(
         domain[indices],
-        1.5 * (intervals["1.00"]["bottom"].mean(0)[indices] / tau_true.max()),
-        1.5 * (intervals["1.50"]["bottom"].mean(0)[indices] / tau_true.max()),
-        color="C6",
-        hatch="/",
-        alpha=0.5,
+        1.5 * (intervals["1.0"]["bottom"].mean(0)[indices] / tau_true.max()),
+        1.5 * (intervals["1.5"]["bottom"].mean(0)[indices] / tau_true.max()),
+        color=_FUNCTION_COLOR,
+        hatch="|",
+        alpha=0.2,
     )
-    _ = plt.xlabel(r"$\mathbf{x}$")
-    _ = plt.ylim([-1.15, 1.6])
-    _ = plt.xlim([-3.8, 3.5])
-    _ = plt.tick_params(axis="x", direction="in", pad=-20)
-    _ = plt.tick_params(axis="y", direction="in", pad=-45)
-    _ = plt.legend(loc=(0.07, 0.5))
+    _ = data_axis.set_xlabel(r"$\mathbf{x}$")
+    _ = data_axis.set_ylim([-1.5, 1.8])
+    _ = data_axis.set_xlim([-3.5, 3.5])
+    _ = data_axis.legend(loc="upper left")
     _ = plt.savefig(file_path, dpi=300)
     _ = plt.close()

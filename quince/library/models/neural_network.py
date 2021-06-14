@@ -25,7 +25,7 @@ class NeuralNetwork(core.PyTorchModel):
         batch_norm,
         spectral_norm,
         dropout_rate,
-        weight_decay,
+        num_examples,
         learning_rate,
         batch_size,
         epochs,
@@ -35,6 +35,7 @@ class NeuralNetwork(core.PyTorchModel):
     ):
         super(NeuralNetwork, self).__init__(
             job_dir=job_dir,
+            num_examples=num_examples,
             learning_rate=learning_rate,
             batch_size=batch_size,
             epochs=epochs,
@@ -88,7 +89,7 @@ class NeuralNetwork(core.PyTorchModel):
         self.optimizer = optim.Adam(
             params=self.network.parameters(),
             lr=self.learning_rate,
-            weight_decay=weight_decay,
+            weight_decay=(0.5 * (1 - dropout_rate)) / num_examples,
         )
         self.network.to(self.device)
 

@@ -1,15 +1,13 @@
 def lambda_top_func(mu, k, y, alpha):
     m = y.shape[0]
     r = (y[k:] - mu).sum(dim=0)
-    py = (k + 1) / m
-    return mu + r.div(m * (alpha + 1) - py)
+    return mu + r.div(m * (alpha + 1) - k)
 
 
 def lambda_bottom_func(mu, k, y, alpha):
     m = y.shape[0]
-    r = (y[: k + 1] - mu).sum(dim=0)
-    py = k + 1
-    return mu + r.div(m * alpha + py)
+    r = (y[:k] - mu).sum(dim=0)
+    return mu + r.div(m * alpha + k)
 
 
 def alpha_fn(pi, lambda_):

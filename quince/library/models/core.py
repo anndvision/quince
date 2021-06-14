@@ -39,8 +39,18 @@ class BaseModel(ABC):
 
 
 class PyTorchModel(BaseModel):
-    def __init__(self, job_dir, learning_rate, batch_size, epochs, num_workers, seed):
+    def __init__(
+        self,
+        job_dir,
+        num_examples,
+        learning_rate,
+        batch_size,
+        epochs,
+        num_workers,
+        seed,
+    ):
         super(PyTorchModel, self).__init__(job_dir=job_dir, seed=seed)
+        self.num_examples = num_examples
         self.learning_rate = learning_rate
         self.batch_size = batch_size
         self.epochs = epochs
@@ -107,8 +117,11 @@ class PyTorchModel(BaseModel):
             train_dataset,
             batch_size=self.batch_size,
             sampler=datasets.RandomFixedLengthSampler(
-                train_dataset, 10 * self.batch_size
-            ),
+                train_dataset,
+                10000,
+            )
+            if self.num_examples < 10000
+            else None,
             drop_last=True,
             pin_memory=True,
             num_workers=self.num_workers,
@@ -166,16 +179,17 @@ class PyTorchModel(BaseModel):
             engine.terminate()
 
     def on_training_completed(self, engine, loader):
-        self.save()
-        self.load()
-        self.evaluator.run(loader)
-        metric_values = self.evaluator.state.metrics
-        print("Metrics Epoch", engine.state.epoch)
-        justify = max(len(k) for k in metric_values) + 2
-        for k, v in metric_values.items():
-            if type(v) == float:
-                print("best {:<{justify}} {:<5f}".format(k, v, justify=justify))
-                continue
+        if not tune.is_session_enabled():
+            self.save()
+            self.load()
+            self.evaluator.run(loader)
+            metric_values = self.evaluator.state.metrics
+            print("Metrics Epoch", engine.state.epoch)
+            justify = max(len(k) for k in metric_values) + 2
+            for k, v in metric_values.items():
+                if type(v) == float:
+                    print("best {:<{justify}} {:<5f}".format(k, v, justify=justify))
+                    continue
 
     def update(self):
         if not tune.is_session_enabled():

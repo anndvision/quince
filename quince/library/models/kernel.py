@@ -39,11 +39,13 @@ class KernelRegressor(object):
                 for _ in range(50):
                     e.append(
                         propensity_model.network(
-                            torch.tensor(self.x).to(propensity_model.device)
-                        ).probs.to("cpu")
+                            torch.tensor(np.hstack([self.x, self.t])).to(
+                                propensity_model.device
+                            )
+                        )[1].probs.to("cpu")
                     )
                 self.e = torch.cat(e, dim=-1).mean(1, keepdim=True).numpy()
-        self.e = (self.e + 1e-3) / (1 + 1e-3)
+        self.e = np.clip(self.e, 1e-7, 1 - 1e-7)
 
         self._gamma = None
 
