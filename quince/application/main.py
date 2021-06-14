@@ -129,49 +129,6 @@ def tune(
     )
 
 
-@cli.command("evaluate")
-@click.option(
-    "--experiment-dir",
-    type=str,
-    required=True,
-    help="location for reading checkpoints",
-)
-@click.option(
-    "--output-dir",
-    type=str,
-    required=False,
-    default=None,
-    help="location for writing results",
-)
-@click.option(
-    "--mc-samples",
-    type=int,
-    required=False,
-    default=100,
-    help="Number of samples from p(y | x, t), default=100",
-)
-@click.pass_context
-def evaluate(
-    context,
-    experiment_dir,
-    output_dir,
-    mc_samples,
-):
-    output_dir = experiment_dir if output_dir is None else output_dir
-    context.obj.update(
-        {
-            "experiment_dir": experiment_dir,
-            "output_dir": output_dir,
-            "mc_samples": mc_samples,
-        }
-    )
-    workflows.evaluation.evaluate(
-        experiment_dir=Path(experiment_dir),
-        output_dir=Path(output_dir),
-        mc_samples=mc_samples,
-    )
-
-
 @cli.command("ihdp")
 @click.pass_context
 @click.option(
@@ -524,6 +481,202 @@ def ensemble(
                     )
                 )
         ray.get(results)
+
+
+@cli.command("evaluate")
+@click.option(
+    "--experiment-dir",
+    type=str,
+    required=True,
+    help="location for reading checkpoints",
+)
+@click.option(
+    "--output-dir",
+    type=str,
+    required=False,
+    default=None,
+    help="location for writing results",
+)
+@click.pass_context
+def evaluate(
+    context,
+    experiment_dir,
+    output_dir,
+):
+    output_dir = experiment_dir if output_dir is None else output_dir
+    context.obj.update(
+        {
+            "experiment_dir": experiment_dir,
+            "output_dir": output_dir,
+        }
+    )
+
+
+@cli.command("compute-intervals")
+@click.option(
+    "--mc-samples",
+    type=int,
+    required=False,
+    default=300,
+    help="Number of samples from p(y | x, t), default=100",
+)
+@click.option(
+    "--gpu-per-trial",
+    default=0.0,
+    type=float,
+    help="number of gpus for each trial, default=0",
+)
+@click.option(
+    "--cpu-per-trial",
+    default=1.0,
+    type=float,
+    help="number of cpus for each trial, default=1",
+)
+@click.pass_context
+def compute_intervals(
+    context,
+    mc_samples,
+    gpu_per_trial,
+    cpu_per_trial,
+):
+    ray.init(
+        num_gpus=context.obj["n_gpu"],
+        dashboard_host="127.0.0.1",
+        ignore_reinit_error=True,
+    )
+
+    @ray.remote(
+        num_gpus=gpu_per_trial,
+        num_cpus=cpu_per_trial,
+    )
+    def evaluator(**kwargs):
+        func = workflows.evaluation.compute_intervals_ensemble(**kwargs)
+        return func
+
+    experiment_dir = Path(context.obj.get("experiment_dir"))
+    results = []
+    for trial_dir in sorted(experiment_dir.iterdir()):
+        if "trial-" not in str(trial_dir):
+            continue
+        results.append(evaluator.remote(trial_dir=trial_dir, mc_samples=mc_samples))
+    ray.get(results)
+
+
+@cli.command("compute-intervals-kernel")
+@click.option(
+    "--gpu-per-trial",
+    default=0.0,
+    type=float,
+    help="number of gpus for each trial, default=0",
+)
+@click.option(
+    "--cpu-per-trial",
+    default=1.0,
+    type=float,
+    help="number of cpus for each trial, default=1",
+)
+@click.pass_context
+def compute_intervals_kernel(
+    context,
+    gpu_per_trial,
+    cpu_per_trial,
+):
+    ray.init(
+        num_gpus=context.obj["n_gpu"],
+        dashboard_host="127.0.0.1",
+        ignore_reinit_error=True,
+    )
+
+    @ray.remote(
+        num_gpus=gpu_per_trial,
+        num_cpus=cpu_per_trial,
+    )
+    def evaluator(**kwargs):
+        func = workflows.evaluation.compute_intervals_kernel(**kwargs)
+        return func
+
+    experiment_dir = Path(context.obj.get("experiment_dir"))
+    results = []
+    for trial_dir in sorted(experiment_dir.iterdir()):
+        if "trial-" not in str(trial_dir):
+            continue
+        results.append(evaluator.remote(trial_dir=trial_dir))
+    ray.get(results)
+
+
+@cli.command("print-summary")
+@click.pass_context
+def print_summary(
+    context,
+):
+    experiment_dir = Path(context.obj.get("experiment_dir"))
+    workflows.evaluation.print_summary(experiment_dir=experiment_dir, kernel=False)
+
+
+@cli.command("paired-t-test")
+@click.pass_context
+def paired_t_test(
+    context,
+):
+    experiment_dir = Path(context.obj.get("experiment_dir"))
+    workflows.evaluation.paired_t_test(experiment_dir=experiment_dir)
+
+
+@cli.command("print-summary-kernel")
+@click.pass_context
+def print_summary(
+    context,
+):
+    experiment_dir = Path(context.obj.get("experiment_dir"))
+    workflows.evaluation.print_summary(experiment_dir=experiment_dir, kernel=True)
+
+
+@cli.command("plot-deferral")
+@click.pass_context
+def plot_deferral(
+    context,
+):
+    experiment_dir = Path(context.obj.get("experiment_dir"))
+    workflows.evaluation.plot_deferral(experiment_dir=experiment_dir)
+
+
+@cli.command("plot-ignorance")
+@click.option(
+    "--trial",
+    default=0,
+    type=int,
+    help="trial, default=0",
+)
+@click.pass_context
+def plot_ignorance(context, trial):
+    trial_dir = Path(context.obj.get("experiment_dir")) / f"trial-{trial:03d}"
+    workflows.evaluation.plot_ignorance(trial_dir=trial_dir)
+
+
+@cli.command("plot-errorbars")
+@click.option(
+    "--trial",
+    default=0,
+    type=int,
+    help="trial, default=0",
+)
+@click.pass_context
+def plot_errorbars(context, trial):
+    trial_dir = Path(context.obj.get("experiment_dir")) / f"trial-{trial:03d}"
+    workflows.evaluation.plot_errorbars(trial_dir=trial_dir)
+
+
+@cli.command("plot-errorbars-kernel")
+@click.option(
+    "--trial",
+    default=0,
+    type=int,
+    help="trial, default=0",
+)
+@click.pass_context
+def plot_errorbars(context, trial):
+    trial_dir = Path(context.obj.get("experiment_dir")) / f"trial-{trial:03d}"
+    workflows.evaluation.plot_errorbars_kernel(trial_dir=trial_dir)
 
 
 if __name__ == "__main__":

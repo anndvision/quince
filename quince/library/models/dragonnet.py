@@ -3,13 +3,12 @@ import torch
 from ignite import metrics
 
 from torch import optim
-from torch.utils import data
 
 from quince.library.models import core
-from quince.library.modules import tarnet
+from quince.library.modules import dragonnet
 
 
-class TARNet(core.PyTorchModel):
+class DragonNet(core.PyTorchModel):
     def __init__(
         self,
         job_dir,
@@ -30,7 +29,7 @@ class TARNet(core.PyTorchModel):
         num_workers,
         seed,
     ):
-        super(TARNet, self).__init__(
+        super(DragonNet, self).__init__(
             job_dir=job_dir,
             num_examples=num_examples,
             learning_rate=learning_rate,
@@ -39,7 +38,7 @@ class TARNet(core.PyTorchModel):
             seed=seed,
             num_workers=num_workers,
         )
-        self.network = tarnet.TARNet(
+        self.network = dragonnet.DragonNet(
             architecture=architecture,
             dim_input=dim_input,
             dim_hidden=dim_hidden,
@@ -52,7 +51,10 @@ class TARNet(core.PyTorchModel):
         )
         self.metrics = {
             "loss": metrics.Average(
-                output_transform=lambda x: -x["outputs"].log_prob(x["targets"]).mean(),
+                output_transform=lambda x: -x["outputs"][0]
+                .log_prob(x["targets"])
+                .mean()
+                - x["outputs"][1].log_prob(x["treatments"]).mean(),
                 device=self.device,
             )
         }
@@ -69,51 +71,29 @@ class TARNet(core.PyTorchModel):
     def train_step(self, engine, batch):
         self.network.train()
         inputs, targets = self.preprocess(batch)
+        treatments = inputs[:, -1:]
         self.optimizer.zero_grad()
         outputs = self.network(inputs)
-        loss = -outputs.log_prob(targets).mean()
+        loss = -outputs[0].log_prob(targets).mean()
+        loss -= outputs[1].log_prob(treatments).mean()
         loss.backward()
         self.optimizer.step()
-        metric_values = {"outputs": outputs, "targets": targets}
+        metric_values = {
+            "outputs": outputs,
+            "targets": targets,
+            "treatments": treatments,
+        }
         return metric_values
 
     def tune_step(self, engine, batch):
         self.network.eval()
         inputs, targets = self.preprocess(batch)
+        treatments = inputs[:, -1:]
         with torch.no_grad():
             outputs = self.network(inputs)
-        metric_values = {"outputs": outputs, "targets": targets}
+        metric_values = {
+            "outputs": outputs,
+            "targets": targets,
+            "treatments": treatments,
+        }
         return metric_values
-
-    def predict_mus(self, ds, batch_size=None):
-        dl = data.DataLoader(
-            ds,
-            batch_size=2 * self.batch_size if batch_size is None else batch_size,
-            shuffle=False,
-            drop_last=False,
-            num_workers=self.num_workers,
-        )
-        mu_0 = []
-        mu_1 = []
-        self.network.eval()
-        with torch.no_grad():
-            for batch in dl:
-                batch = self.preprocess(batch)
-                covariates = torch.cat([batch[0][:, :-1], batch[0][:, :-1]], 0)
-                treatments = torch.cat(
-                    [
-                        torch.zeros_like(batch[0][:, -1:]),
-                        torch.ones_like(batch[0][:, -1:]),
-                    ],
-                    0,
-                )
-                inputs = torch.cat([covariates, treatments], -1)
-                posterior_predictive = self.network(inputs)
-                mu = posterior_predictive.mean
-                mus = torch.split(mu, mu.shape[0] // 2, dim=0)
-                mu_0.append(mus[0])
-                mu_1.append(mus[1])
-        return (
-            torch.cat(mu_0, 0).to("cpu").numpy(),
-            torch.cat(mu_1, 0).to("cpu").numpy(),
-        )

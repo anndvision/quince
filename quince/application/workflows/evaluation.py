@@ -13,163 +13,72 @@ from quince.library import datasets
 from quince.library import plotting
 
 
-def evaluate(experiment_dir, output_dir, mc_samples):
-    summary = {
-        "policy_risk": {
-            "risk": {"true": []},
-            "error": {},
-        },
-        "sweep": {
-            "sensitivity": {
-                "pehe": [],
-                "error_rate": [],
-                "defer_rate": [],
-            },
-            "ignorance": {
-                "pehe": [],
-                "error_rate": [],
-                "defer_rate": [],
-            },
-            "epistemic": {
-                "pehe": [],
-                "error_rate": [],
-                "defer_rate": [],
-            },
-        },
-    }
-    summary_kernel = {
-        "policy_risk": {
-            "risk": {"true": []},
-            "error": {},
-        },
-        "sweep": {
-            "sensitivity": {
-                "pehe": [],
-                "error_rate": [],
-                "defer_rate": [],
-            },
-        },
-    }
+def compute_intervals_ensemble(trial_dir, mc_samples):
+    config_path = trial_dir / "config.json"
+    with config_path.open(mode="r") as cp:
+        config = json.load(cp)
+    dataset_name = config.get("dataset_name")
+    ds_train = datasets.DATASETS.get(dataset_name)(**config.get("ds_train"))
+    outcome_ensemble = build_ensemble(
+        config=config, experiment_dir=trial_dir, ds=ds_train
+    )
+    ds_test = datasets.DATASETS.get(dataset_name)(**config.get("ds_test"))
+    _ = get_intervals(
+        dataset=ds_test,
+        outcome_ensemble=outcome_ensemble,
+        mc_samples_y=mc_samples,
+        file_path=trial_dir / "intervals.json",
+    )
+
+
+def compute_intervals_kernel(trial_dir):
+    config_path = trial_dir / "config.json"
+    with config_path.open(mode="r") as cp:
+        config = json.load(cp)
+    dataset_name = config.get("dataset_name")
+    ds_train = datasets.DATASETS.get(dataset_name)(**config.get("ds_train"))
+    outcome_ensemble = build_ensemble(
+        config=config, experiment_dir=trial_dir, ds=ds_train
+    )
+    ds_test = datasets.DATASETS.get(dataset_name)(**config.get("ds_test"))
+    kr = models.KernelRegressor(
+        dataset=ds_train,
+        initial_length_scale=1.0,
+        feature_extractor=outcome_ensemble[0].encoder.encoder
+        if config["dataset_name"] == "hcmnist"
+        else None,
+        propensity_model=outcome_ensemble[0],
+        verbose=False,
+    )
+    ds_valid = datasets.DATASETS.get(dataset_name)(**config.get("ds_valid"))
+    kr.fit_length_scale(ds_valid, grid=np.arange(0.1, 3.0, 0.002))
+    _ = get_intervals_kernel(
+        dataset=ds_test, model=kr, file_path=trial_dir / "intervals_kernels.json",
+    )
+
+
+def print_summary(experiment_dir, kernel):
+    summary = {"policy_risk": {"risk": {"true": []}, "error": {},}}
     for k in GAMMAS.keys():
         summary["policy_risk"]["risk"].update({k: []})
         summary["policy_risk"]["error"].update({k: []})
-        summary_kernel["policy_risk"]["risk"].update({k: []})
-        summary_kernel["policy_risk"]["error"].update({k: []})
-    for i, trial_dir in enumerate(sorted(experiment_dir.iterdir())):
+    for trial_dir in sorted(experiment_dir.iterdir()):
+        if "trial-" not in str(trial_dir):
+            continue
         config_path = trial_dir / "config.json"
         with config_path.open(mode="r") as cp:
             config = json.load(cp)
         dataset_name = config.get("dataset_name")
-        ds_train = datasets.DATASETS.get(dataset_name)(**config.get("ds_train"))
-        outcome_ensemble, propensity_ensemble = build_ensemble(
-            config=config, experiment_dir=trial_dir, ds=ds_train
-        )
         ds_test = datasets.DATASETS.get(dataset_name)(**config.get("ds_test"))
-        intervals = get_intervals(
-            dataset=ds_test,
-            outcome_ensemble=outcome_ensemble,
-            propensity_ensemble=propensity_ensemble,
-            mc_samples_y=mc_samples,
-            file_path=trial_dir / "intervals.json",
-        )
-
-        if len(ds_train) <= 5000:
-            kr = models.KernelRegressor(
-                dataset=ds_train,
-                initial_length_scale=1.0,
-                feature_extractor=outcome_ensemble[0].encoder.encoder
-                if config["dataset_name"] == "hcmnist"
-                else None,
-                propensity_model=propensity_ensemble[0],
-                verbose=False,
-            )
-            ds_valid = datasets.DATASETS.get(dataset_name)(**config.get("ds_valid"))
-            kr.fit_length_scale(ds_valid, grid=np.arange(0.1, 3.0, 0.002))
-
-            intervals_kernel = get_intervals_kernel(
-                dataset=ds_test,
-                model=kr,
-                file_path=trial_dir / "intervals_kernels.json",
-            )
-
         tau_true = torch.tensor(ds_test.mu1 - ds_test.mu0).to("cpu")
-        p_density = output_dir / f"trial-{i:03d}" / "density"
-        p_density.mkdir(parents=True, exist_ok=True)
-        p_kernel = output_dir / f"trial-{i:03d}" / "kernel"
-        p_kernel.mkdir(parents=True, exist_ok=True)
-        if config["dataset_name"] == "ihdp":
-            plot_errorbars(intervals=intervals, tau_true=tau_true, output_dir=p_density)
-            plot_errorbars_kernel(
-                intervals=intervals_kernel, tau_true=tau_true, output_dir=p_kernel
-            )
-        elif config["dataset_name"] in ["synthetic", "hcmnist"]:
-            if config["dataset_name"] == "synthetic":
-                plot_fillbetween(
-                    intervals=intervals,
-                    ds_train=ds_train,
-                    ds_test=ds_test,
-                    output_dir=p_density,
-                )
-                plot_functions(
-                    intervals=intervals,
-                    ds_train=ds_train,
-                    ds_test=ds_test,
-                    output_dir=p_density,
-                )
-                plotting.rainbow(
-                    x=ds_train.x.ravel(),
-                    t=ds_train.t,
-                    domain=ds_test.x.ravel(),
-                    tau_true=(ds_test.mu1 - ds_test.mu0).ravel(),
-                    intervals=intervals,
-                    file_path=p_density / "rainbow.png",
-                )
-                if len(ds_train) <= 5000:
-                    plot_fillbetween(
-                        intervals=intervals_kernel,
-                        ds_train=ds_train,
-                        ds_test=ds_test,
-                        output_dir=p_kernel,
-                    )
-            else:
-                plot_errorbars(
-                    intervals=intervals, tau_true=tau_true, output_dir=p_density
-                )
-                plot_functions_mnist(
-                    intervals=intervals,
-                    ds_train=ds_train,
-                    ds_test=ds_test,
-                    output_dir=p_density,
-                )
         pi_true = (
             tau_true >= 0.0 if config["dataset_name"] == "ihdp" else tau_true < 0.0
         )
-        update_ignorance(
-            results=summary,
-            intervals=intervals,
-            tau_true=tau_true,
-            pi_true=pi_true,
+        intervals = load_intervals(
+            file_path=trial_dir / "intervals_kernels.json"
+            if kernel
+            else trial_dir / "intervals.json",
         )
-        update_sensitivity(
-            results=summary,
-            intervals=intervals,
-            tau_true=tau_true,
-            pi_true=pi_true,
-        )
-        update_epistemic(
-            results=summary,
-            intervals=intervals,
-            tau_true=tau_true,
-            pi_true=pi_true,
-        )
-        if len(ds_train) <= 5000:
-            update_sensitivity(
-                results=summary_kernel,
-                intervals=intervals_kernel,
-                tau_true=tau_true,
-                pi_true=pi_true,
-            )
-
         update_summaries(
             summary=summary,
             dataset=ds_test,
@@ -178,18 +87,6 @@ def evaluate(experiment_dir, output_dir, mc_samples):
             epistemic_uncertainty=False,
             lt=False if config["dataset_name"] == "ihdp" else True,
         )
-
-        if len(ds_train) <= 5000:
-            update_summaries(
-                summary=summary_kernel,
-                dataset=ds_test,
-                intervals=intervals_kernel,
-                pi_true=pi_true.numpy().astype("float32"),
-                epistemic_uncertainty=False,
-                lt=False if config["dataset_name"] == "ihdp" else True,
-            )
-        i += 1
-
     for k, v in summary["policy_risk"]["risk"].items():
         se = stats.sem(v)
         h = se * stats.t.ppf((1 + 0.95) / 2.0, 20 - 1)
@@ -201,32 +98,98 @@ def evaluate(experiment_dir, output_dir, mc_samples):
         print(k, np.mean(v), h)
     print("")
 
-    if len(ds_train) <= 5000:
-        print("Paired t-test")
-        for k in summary["policy_risk"]["risk"].keys():
-            v_density = np.asarray(summary["policy_risk"]["risk"][k])
-            v_kernel = np.asarray(summary_kernel["policy_risk"]["risk"][k])
-            statistic, pvalue = stats.ttest_rel(v_density, v_kernel)
-            print(k, f"{statistic:.06f}", f"{pvalue:.06f}")
-        print("")
 
-        for k, v in summary_kernel["policy_risk"]["risk"].items():
-            se = stats.sem(v)
-            h = se * stats.t.ppf((1 + 0.95) / 2.0, 20 - 1)
-            print(k, np.mean(v), h)
-        print("")
-        for k, v in summary_kernel["policy_risk"]["error"].items():
-            se = stats.sem(v)
-            h = se * stats.t.ppf((1 + 0.95) / 2.0, 20 - 1)
-            print(k, np.mean(v), h)
-        print("")
+def paired_t_test(experiment_dir):
+    summary = {"policy_risk": {"risk": {"true": []}, "error": {},}}
+    summary_kernel = {"policy_risk": {"risk": {"true": []}, "error": {},}}
+    for k in GAMMAS.keys():
+        summary["policy_risk"]["risk"].update({k: []})
+        summary["policy_risk"]["error"].update({k: []})
+        summary_kernel["policy_risk"]["risk"].update({k: []})
+        summary_kernel["policy_risk"]["error"].update({k: []})
+    for trial_dir in sorted(experiment_dir.iterdir()):
+        if "trial-" not in str(trial_dir):
+            continue
+        config_path = trial_dir / "config.json"
+        with config_path.open(mode="r") as cp:
+            config = json.load(cp)
+        dataset_name = config.get("dataset_name")
+        ds_test = datasets.DATASETS.get(dataset_name)(**config.get("ds_test"))
+        tau_true = torch.tensor(ds_test.mu1 - ds_test.mu0).to("cpu")
+        pi_true = (
+            tau_true >= 0.0 if config["dataset_name"] == "ihdp" else tau_true < 0.0
+        )
+        intervals = load_intervals(file_path=trial_dir / "intervals.json",)
+        intervals_kernel = load_intervals(
+            file_path=trial_dir / "intervals_kernels.json"
+        )
+        update_summaries(
+            summary=summary,
+            dataset=ds_test,
+            intervals=intervals,
+            pi_true=pi_true.numpy().astype("float32"),
+            epistemic_uncertainty=False,
+            lt=False if config["dataset_name"] == "ihdp" else True,
+        )
+        update_summaries(
+            summary=summary_kernel,
+            dataset=ds_test,
+            intervals=intervals_kernel,
+            pi_true=pi_true.numpy().astype("float32"),
+            epistemic_uncertainty=False,
+            lt=False if config["dataset_name"] == "ihdp" else True,
+        )
+    print("Paired t-test")
+    for k in summary["policy_risk"]["risk"].keys():
+        v_density = np.asarray(summary["policy_risk"]["risk"][k])
+        v_kernel = np.asarray(summary_kernel["policy_risk"]["risk"][k])
+        statistic, pvalue = stats.ttest_rel(v_density, v_kernel)
+        print(k, f"{statistic:.06f}", f"{pvalue:.06f}")
+    print("")
 
-    summary_path = output_dir / "summary.json"
-    with summary_path.open(mode="w") as sp:
-        json.dump(summary, sp)
-    summary_path = output_dir / "summary_kernel.json"
-    with summary_path.open(mode="w") as sp:
-        json.dump(summary_kernel, sp)
+
+def plot_deferral(experiment_dir):
+    summary = {
+        "sweep": {
+            "sensitivity": {"pehe": [], "error_rate": [], "defer_rate": [],},
+            "ignorance": {"pehe": [], "error_rate": [], "defer_rate": [],},
+            "epistemic": {"pehe": [], "error_rate": [], "defer_rate": [],},
+        },
+    }
+    summary_kernel = {
+        "sweep": {"sensitivity": {"pehe": [], "error_rate": [], "defer_rate": [],},},
+    }
+    for trial_dir in sorted(experiment_dir.iterdir()):
+        if "trial-" not in str(trial_dir):
+            continue
+        config_path = trial_dir / "config.json"
+        with config_path.open(mode="r") as cp:
+            config = json.load(cp)
+        dataset_name = config.get("dataset_name")
+        ds_test = datasets.DATASETS.get(dataset_name)(**config.get("ds_test"))
+        tau_true = torch.tensor(ds_test.mu1 - ds_test.mu0).to("cpu")
+        pi_true = (
+            tau_true >= 0.0 if config["dataset_name"] == "ihdp" else tau_true < 0.0
+        )
+        intervals = load_intervals(file_path=trial_dir / "intervals.json",)
+        intervals_kernel = load_intervals(
+            file_path=trial_dir / "intervals_kernels.json",
+        )
+        update_ignorance(
+            results=summary, intervals=intervals, tau_true=tau_true, pi_true=pi_true,
+        )
+        update_sensitivity(
+            results=summary, intervals=intervals, tau_true=tau_true, pi_true=pi_true,
+        )
+        update_epistemic(
+            results=summary, intervals=intervals, tau_true=tau_true, pi_true=pi_true,
+        )
+        update_sensitivity(
+            results=summary_kernel,
+            intervals=intervals_kernel,
+            tau_true=tau_true,
+            pi_true=pi_true,
+        )
 
     epistemic = summary["sweep"]["epistemic"]
     for k in epistemic.keys():
@@ -238,14 +201,10 @@ def evaluate(experiment_dir, output_dir, mc_samples):
     for k in sensitivity.keys():
         sensitivity[k] = np.nan_to_num(np.asarray(sensitivity[k]).transpose())
     sensitivity_kernel = summary_kernel["sweep"]["sensitivity"]
-    if len(ds_train) <= 5000:
-        for k in sensitivity_kernel.keys():
-            sensitivity_kernel[k] = np.nan_to_num(
-                np.asarray(sensitivity_kernel[k]).transpose()
-            )
-    else:
-        sensitivity_kernel = None
-
+    for k in sensitivity_kernel.keys():
+        sensitivity_kernel[k] = np.nan_to_num(
+            np.asarray(sensitivity_kernel[k]).transpose()
+        )
     plot_sweep(
         ignorance=ignorance,
         epistemic=epistemic,
@@ -264,14 +223,12 @@ def evaluate(experiment_dir, output_dir, mc_samples):
 
 def build_ensemble(config, experiment_dir, ds):
     outcome_ensemble = []
-    propensity_ensemble = []
     for i in range(config.get("ensemble_size")):
         model_dir = experiment_dir / "checkpoints" / f"model-{i}" / "mu"
-        outcome_model = models.GaussianMixtureDensityNetwork(
+        outcome_model = models.DragonNet(
             job_dir=model_dir,
             architecture="resnet",
             dim_input=ds.dim_input,
-            dim_treatment=ds.dim_treatment,
             dim_hidden=config.get("dim_hidden"),
             dim_output=config.get("num_components"),
             depth=config.get("depth"),
@@ -279,67 +236,38 @@ def build_ensemble(config, experiment_dir, ds):
             batch_norm=False,
             spectral_norm=config.get("spectral_norm"),
             dropout_rate=config.get("dropout_rate"),
-            weight_decay=(0.5 * (1 - config.get("dropout_rate"))) / len(ds),
+            num_examples=len(ds),
             learning_rate=config.get("learning_rate"),
             batch_size=config.get("batch_size"),
             epochs=config.get("epochs"),
             patience=100,
-            num_workers=8,
+            num_workers=0,
             seed=config.get("seed"),
         )
-        outcome_model.load(load_best=True)
+        outcome_model.load()
         outcome_ensemble.append(outcome_model)
-        model_dir = experiment_dir / "checkpoints" / f"model-{i}" / "pi"
-        propensity_model = models.CategoricalDensityNetwork(
-            job_dir=model_dir,
-            architecture="resnet",
-            dim_input=ds.dim_input,
-            dim_treatment=0,
-            dim_hidden=config.get("dim_hidden"),
-            dim_output=1,
-            depth=config.get("depth"),
-            negative_slope=config.get("negative_slope"),
-            batch_norm=False,
-            spectral_norm=config.get("spectral_norm"),
-            dropout_rate=config.get("dropout_rate"),
-            weight_decay=(0.5 * (1 - config.get("dropout_rate"))) / len(ds),
-            learning_rate=config.get("learning_rate"),
-            batch_size=config.get("batch_size"),
-            epochs=config.get("epochs"),
-            patience=100,
-            num_workers=8,
-            seed=config.get("seed"),
-        )
-        propensity_model.load(load_best=True)
-        propensity_ensemble.append(propensity_model)
-    return outcome_ensemble, propensity_ensemble
+    return outcome_ensemble
 
 
 def get_intervals(
-    dataset,
-    outcome_ensemble,
-    propensity_ensemble,
-    mc_samples_y,
-    file_path,
+    dataset, outcome_ensemble, mc_samples_y, file_path,
 ):
-    x_in = torch.tensor(dataset.x).to(outcome_ensemble[0].device)
-    inputs = torch.cat(
-        [
-            torch.cat([x_in, torch.zeros_like(x_in[:, :1])], dim=-1),
-            torch.cat([x_in, torch.ones_like(x_in[:, :1])], dim=-1),
-        ]
-    )
     if file_path.exists():
         with file_path.open(mode="r") as fp:
             intervals = json.load(fp)
     else:
+        x_in = torch.tensor(dataset.x).to(outcome_ensemble[0].device)
+        inputs = torch.cat(
+            [
+                torch.cat([x_in, torch.zeros_like(x_in[:, :1])], dim=-1),
+                torch.cat([x_in, torch.ones_like(x_in[:, :1])], dim=-1),
+            ]
+        )
         intervals = {}
         for k, v in GAMMAS.items():
             tau_mean, tau_bottom, tau_top = predict_tau_ensemble(
                 inputs_outcome=inputs,
-                inputs_propensity=x_in,
                 outcome_ensemble=outcome_ensemble,
-                propensity_ensemble=propensity_ensemble,
                 gamma=v,
                 mc_samples_y=mc_samples_y,
             )
@@ -358,32 +286,22 @@ def get_intervals(
 
 
 def predict_tau_ensemble(
-    inputs_outcome,
-    inputs_propensity,
-    outcome_ensemble,
-    propensity_ensemble,
-    gamma,
-    mc_samples_y,
+    inputs_outcome, outcome_ensemble, gamma, mc_samples_y,
 ):
-    n = inputs_propensity.shape[0]
+    n = inputs_outcome.shape[0] // 2
     tau_tops = []
     tau_bottoms = []
     tau_means = []
     with torch.no_grad():
-        for outcome_model, propensity_model in zip(
-            outcome_ensemble, propensity_ensemble
-        ):
+        for outcome_model in outcome_ensemble:
             outcome_model.network.eval()
-            propensity_model.network.eval()
-            outcome_post = outcome_model.network(inputs_outcome)
-            propensity_post = propensity_model.network(inputs_propensity)
+            outcome_post, propensity_post = outcome_model.network(inputs_outcome)
 
             locs = outcome_post.component_distribution.loc
             probs = outcome_post.mixture_distribution.probs
             mu_hat = torch.sum(probs * locs, dim=-1).unsqueeze(0)
             mu_hat_0, mu_hat_1 = torch.split(mu_hat, mu_hat.shape[1] // 2, dim=1)
-
-            e_hat = (propensity_post.probs.squeeze(-1) + 1e-7) / (1 + 1e-7)
+            e_hat = torch.clip(propensity_post.probs.squeeze(-1), 1e-7, 1 - 1e-7)[:n]
 
             alpha_1_hat = utils.alpha_fn(e_hat, gamma)
             alpha_0_hat = utils.alpha_fn(1.0 - e_hat, gamma)
@@ -466,6 +384,15 @@ def get_intervals_kernel(dataset, model, file_path):
     return intervals
 
 
+def load_intervals(file_path,):
+    with file_path.open(mode="r") as fp:
+        intervals = json.load(fp)
+    for k, v in intervals.items():
+        for k1, v2 in v.items():
+            intervals[k][k1] = torch.Tensor(v2)
+    return intervals
+
+
 def predict_tau_kernel(x, model, gamma):
     model.gamma = gamma
     k = model.k(x)
@@ -501,18 +428,53 @@ def predict_tau_kernel(x, model, gamma):
     return tau_mean, tau_bottom, tau_top
 
 
-def plot_errorbars(intervals, tau_true, output_dir):
+def plot_errorbars(trial_dir):
+    output_dir = trial_dir / "ensemble" / "errorbars"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    config_path = trial_dir / "config.json"
+    with config_path.open(mode="r") as cp:
+        config = json.load(cp)
+    dataset_name = config.get("dataset_name")
+    ds_test = datasets.DATASETS.get(dataset_name)(**config.get("ds_test"))
+    tau_true = torch.tensor(ds_test.mu1 - ds_test.mu0).to("cpu")
+    intervals = load_intervals(file_path=trial_dir / "intervals.json",)
     for k in intervals.keys():
         tau_hat = intervals[k]
         tau_mean = tau_hat["mean"].mean(0)
         tau_top = torch.abs(
-            tau_hat["top"].mean(0) + np.nan_to_num(2 * tau_hat["top"].std(0)) - tau_mean
+            tau_hat["top"].mean(0) + 2 * tau_hat["mean"].std(0) - tau_mean
         )
         tau_bottom = torch.abs(
-            tau_hat["bottom"].mean(0)
-            - np.nan_to_num(2 * tau_hat["bottom"].std(0))
-            - tau_mean
+            tau_hat["bottom"].mean(0) - 2 * tau_hat["mean"].std(0) - tau_mean
         )
+        plotting.errorbar(
+            x=tau_true,
+            y=tau_mean,
+            y_err=torch.cat([tau_bottom.unsqueeze(0), tau_top.unsqueeze(0)]),
+            x_label=r"$\tau(\mathbf{x})$",
+            y_label=r"$\widehat{\tau}(\mathbf{x})$",
+            marker_label=f"$\log\Gamma = $ {k}",
+            x_pad=-20,
+            y_pad=-45,
+            file_path=output_dir / f"gamma-{k}.png",
+        )
+
+
+def plot_errorbars_kernel(trial_dir):
+    output_dir = trial_dir / "kernel" / "errorbars"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    config_path = trial_dir / "config.json"
+    with config_path.open(mode="r") as cp:
+        config = json.load(cp)
+    dataset_name = config.get("dataset_name")
+    ds_test = datasets.DATASETS.get(dataset_name)(**config.get("ds_test"))
+    tau_true = torch.tensor(ds_test.mu1 - ds_test.mu0).to("cpu")
+    intervals = load_intervals(file_path=trial_dir / "intervals_kernels.json",)
+    for k in intervals.keys():
+        tau_hat = intervals[k]
+        tau_mean = tau_hat["mean"].mean(0)
+        tau_top = torch.abs(tau_hat["top"].mean(0) - tau_mean)
+        tau_bottom = torch.abs(tau_hat["bottom"].mean(0) - tau_mean)
         plotting.errorbar(
             x=tau_true,
             y=tau_mean,
@@ -541,6 +503,7 @@ def plot_functions(intervals, ds_train, ds_test, output_dir):
             tau_mean=tau_mean[:, indices],
             file_path=output_dir / f"functions_gamma-{k}.png",
         )
+        break
 
 
 def plot_functions_mnist(intervals, ds_train, ds_test, output_dir):
@@ -558,19 +521,37 @@ def plot_functions_mnist(intervals, ds_train, ds_test, output_dir):
             tau_mean=tau_mean[:, indices],
             file_path=output_dir / f"functions_gamma-{k}.png",
         )
+        break
 
 
-def plot_fillbetween(intervals, ds_train, ds_test, output_dir):
+def plot_ignorance(trial_dir):
+    output_dir = trial_dir / "ensemble" / "ignorance"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    config_path = trial_dir / "config.json"
+    with config_path.open(mode="r") as cp:
+        config = json.load(cp)
+    dataset_name = config.get("dataset_name")
+    ds_train = datasets.DATASETS.get(dataset_name)(**config.get("ds_train"))
+    config["ds_test"]["domain"] = 3.5
+    ds_test = datasets.DATASETS.get(dataset_name)(**config.get("ds_test"))
+    tau_true = torch.tensor(ds_test.mu1 - ds_test.mu0).to("cpu")
+    outcome_ensemble = build_ensemble(
+        config=config, experiment_dir=trial_dir, ds=ds_train
+    )
+    intervals = get_intervals(
+        dataset=ds_test,
+        outcome_ensemble=outcome_ensemble,
+        mc_samples_y=500,
+        file_path=trial_dir / "intervals_ignorance.json",
+    )
     tau_true = ds_test.mu1 - ds_test.mu0
     domain = ds_test.x.ravel()
     indices = np.argsort(domain)
     for k in intervals.keys():
         tau_hat = intervals[k]
         tau_mean = tau_hat["mean"].mean(0)
-        tau_top = tau_hat["top"].mean(0) + np.nan_to_num(2 * tau_hat["top"].std(0))
-        tau_bottom = tau_hat["bottom"].mean(0) - np.nan_to_num(
-            2 * tau_hat["bottom"].std(0)
-        )
+        tau_top = tau_hat["top"].mean(0) + 2 * tau_hat["mean"].std(0)
+        tau_bottom = tau_hat["bottom"].mean(0) - 2 * tau_hat["mean"].std(0)
         plotting.pretty_interval(
             x=ds_train.x.ravel(),
             t=ds_train.t,
@@ -582,6 +563,23 @@ def plot_fillbetween(intervals, ds_train, ds_test, output_dir):
             legend_title=f"$\log \Gamma = {k}$",
             file_path=output_dir / f"gamma-{k}.png",
         )
+        if k == "0.0":
+            plotting.functions(
+                x=ds_train.x.ravel(),
+                t=ds_train.t,
+                domain=domain[indices],
+                tau_true=tau_true[indices],
+                tau_mean=tau_hat["mean"][:, indices],
+                file_path=output_dir / f"functions.png",
+            )
+    plotting.rainbow(
+        x=ds_train.x.ravel(),
+        t=ds_train.t,
+        domain=ds_test.x.ravel(),
+        tau_true=tau_true.ravel(),
+        intervals=intervals,
+        file_path=output_dir / f"rainbow.png",
+    )
 
 
 def plot_fillbetween_mnist(intervals, ds_train, ds_test, output_dir):
@@ -591,10 +589,8 @@ def plot_fillbetween_mnist(intervals, ds_train, ds_test, output_dir):
     for k in intervals.keys():
         tau_hat = intervals[k]
         tau_mean = tau_hat["mean"].mean(0)
-        tau_top = tau_hat["top"].mean(0) + np.nan_to_num(2 * tau_hat["top"].std(0))
-        tau_bottom = tau_hat["bottom"].mean(0) - np.nan_to_num(
-            2 * tau_hat["bottom"].std(0)
-        )
+        tau_top = tau_hat["top"].mean(0) + 2 * tau_hat["mean"].std(0)
+        tau_bottom = tau_hat["bottom"].mean(0) - 2 * tau_hat["mean"].std(0)
         plotting.pretty_interval(
             x=ds_train.phi.ravel(),
             t=ds_train.t,
@@ -608,39 +604,25 @@ def plot_fillbetween_mnist(intervals, ds_train, ds_test, output_dir):
         )
 
 
-def plot_errorbars_kernel(intervals, tau_true, output_dir):
-    for k in intervals.keys():
-        tau_hat = intervals[k]
-        tau_mean = tau_hat["mean"].mean(0)
-        tau_top = torch.abs(tau_hat["top"].mean(0) - tau_mean)
-        tau_bottom = torch.abs(tau_hat["bottom"].mean(0) - tau_mean)
-        plotting.errorbar(
-            x=tau_true,
-            y=tau_mean,
-            y_err=torch.cat([tau_bottom.unsqueeze(0), tau_top.unsqueeze(0)]),
-            x_label=r"$\tau(\mathbf{x})$",
-            y_label=r"$\widehat{\tau}(\mathbf{x})$",
-            marker_label=f"$\log\Gamma = $ {k}",
-            x_pad=-20,
-            y_pad=-45,
-            file_path=output_dir / f"gamma-{k}.png",
-        )
-
-
 def plot_sweep(ignorance, sensitivity, epistemic, mode, sensitivity_kernel=None):
     means_ig, cis_ig = interpolate_values(ignorance["defer_rate"], ignorance[mode])
     means_se, cis_se = interpolate_values(sensitivity["defer_rate"], sensitivity[mode])
     means_ep, cis_ep = interpolate_values(epistemic["defer_rate"], epistemic[mode])
     data = {
-        "Ignorance": {"mean": means_ig, "ci": cis_ig, "color": "C4", "line_style": "-"},
+        "Ignorance": {
+            "mean": np.clip(means_ig, 1e-5, np.inf),
+            "ci": cis_ig,
+            "color": "C4",
+            "line_style": "-",
+        },
         "Sensitivity": {
-            "mean": means_se,
+            "mean": np.clip(means_se, 1e-5, np.inf),
             "ci": cis_se,
             "color": "C2",
             "line_style": "-",
         },
         "Uncertainty": {
-            "mean": means_ep,
+            "mean": np.clip(means_ep, 1e-5, np.inf),
             "ci": cis_ep,
             "color": "C0",
             "line_style": "-",
@@ -651,13 +633,14 @@ def plot_sweep(ignorance, sensitivity, epistemic, mode, sensitivity_kernel=None)
             sensitivity_kernel["defer_rate"], sensitivity_kernel[mode]
         )
         data["Sensitivity Kernel"] = {
-            "mean": means_sek,
+            "mean": np.clip(means_sek, 1e-5, np.inf),
             "ci": cis_sek,
             "color": "C2",
             "line_style": "--",
         }
+    deferral_rates = [i / len(means_ig) for i in range(len(means_ig))]
     plotting.fill_between(
-        x=DEFERRAL_RATES,
+        x=deferral_rates,
         y=data,
         x_label="Deferral Rate",
         y_label="Recommendation Error Rate"
@@ -665,8 +648,8 @@ def plot_sweep(ignorance, sensitivity, epistemic, mode, sensitivity_kernel=None)
         else r"Standardized $\sqrt{ \epsilon_{PEHE}}$",
         alpha=0.2,
         y_scale="log" if mode == "error_rate" else "linear",
-        x_lim=[0, 1],
-        y_lim=[0.0003, 5] if mode == "error_rate" else None,
+        x_lim=[0, 1.0],
+        y_lim=[1e-5, 2e-1] if mode == "error_rate" else None,
         x_pad=-20,
         y_pad=-45,
         legend_loc="upper right",
@@ -675,62 +658,80 @@ def plot_sweep(ignorance, sensitivity, epistemic, mode, sensitivity_kernel=None)
 
 
 def update_ignorance(results, intervals, tau_true, pi_true):
+    n = len(tau_true)
     pehe = []
     error_rate = []
     defer_rate = []
+    tau_hat = intervals["0.0"]
+    tau_mean = tau_hat["mean"].mean(0)
+    pi_hat = tau_mean > 0.0
+    defer_rate.append(0.0)
+    pehe.append(torch.sqrt(torch.square(tau_true - tau_mean).mean(0)).item())
+    error_rate.append(1 - (pi_hat == pi_true).float().mean().item())
+    deferred = []
     for k in intervals.keys():
         tau_hat = intervals[k]
         tau_mean = tau_hat["mean"].mean(0)
-        s = torch.cat([tau_mean, tau_true]).var()
-        tau_top = tau_hat["top"].mean(0) + np.nan_to_num(2 * tau_hat["top"].std(0))
-        tau_bottom = tau_hat["bottom"].mean(0) - np.nan_to_num(
-            2 * tau_hat["bottom"].std(0)
-        )
+        tau_top = tau_hat["top"].mean(0) + 2 * tau_hat["mean"].std(0)
+        tau_bottom = tau_hat["bottom"].mean(0) - 2 * tau_hat["mean"].std(0)
         defer = (tau_top >= 0) * (tau_bottom <= 0)
-        keep = ~defer
+        new_deferrals = list(set(np.where(defer)[0]).difference(set(deferred)))
+        rank = torch.min(
+            torch.abs(torch.cat([tau_top.unsqueeze(0), tau_bottom.unsqueeze(0)])), dim=0
+        )[0]
+        if len(new_deferrals) > 0:
+            for idx in np.argsort(-rank[new_deferrals]):
+                deferred.append(new_deferrals[idx])
+                defer_rate.append(len(deferred) / n)
+                keep = torch.ones_like(tau_true, dtype=torch.bool)
+                keep[deferred] = False
+                pehe.append(
+                    torch.sqrt(
+                        torch.square(tau_true[keep] - tau_mean[keep]).mean(0)
+                    ).item()
+                )
+                error_rate.append((pi_hat[keep] != pi_true[keep]).sum().item() / n)
         pi_hat = tau_bottom > 0.0
-        if k == "1.0":
-            error_rate.append(1 - (pi_hat == pi_true).float().mean().item())
+    new_deferrals = list(set(set(range(n))).difference(set(deferred)))
+    if len(new_deferrals) > 0:
+        for idx in np.argsort(rank[new_deferrals]):
+            deferred.append(new_deferrals[idx])
+            defer_rate.append(len(deferred) / n)
+            keep = torch.ones_like(tau_true, dtype=torch.bool)
+            keep[deferred] = False
             pehe.append(
-                torch.sqrt(torch.square(tau_mean - tau_true).div(s).mean()).item()
+                torch.sqrt(torch.square(tau_true[keep] - tau_mean[keep]).mean(0)).item()
             )
-            defer_rate.append(0.0)
-        error_rate.append(1 - (pi_hat[keep] == pi_true[keep]).float().mean().item())
-        pehe.append(
-            torch.sqrt(
-                torch.square(tau_mean[keep] - tau_true[keep]).div(s).mean()
-            ).item()
-        )
-        defer_rate.append(defer.float().mean().item())
+            error_rate.append((pi_hat[keep] != pi_true[keep]).sum().item() / n)
     results["sweep"]["ignorance"]["pehe"].append(pehe)
     results["sweep"]["ignorance"]["error_rate"].append(error_rate)
     results["sweep"]["ignorance"]["defer_rate"].append(defer_rate)
 
 
 def update_epistemic(results, intervals, tau_true, pi_true):
+    n = len(tau_true)
     pehe = []
     error_rate = []
     defer_rate = []
-    tau_hat = intervals["0.00"]
-    tau_mean = tau_hat["mean"].mean(0)
+    tau_hat = intervals["0.0"]
     tau_var = tau_hat["mean"].var(0)
     tau_var, idx_var = torch.sort(tau_var)
     tau_mean = tau_hat["mean"].mean(0)[idx_var]
-    tau = tau_true[idx_var]
-    s = torch.cat([tau_mean, tau]).var()
+    tau_true = tau_true[idx_var]
+    pi_true = pi_true[idx_var]
     pi_hat = tau_mean > 0.0
     defer_rate.append(0.0)
-    pehe.append(torch.sqrt(torch.square(tau - tau_mean).div(s).mean(0)).item())
+    pehe.append(torch.sqrt(torch.square(tau_true - tau_mean).mean(0)).item())
     error_rate.append(1 - (pi_hat == pi_true).float().mean().item())
-    for i in range(len(tau)):
-        defer_rate.append(1 - (len(tau[: -(i + 1)]) / len(tau)))
+    for i in range(len(tau_true)):
+        defer_rate.append(1 - (len(tau_true[: -(i + 1)]) / len(tau_true)))
         pehe.append(
             torch.sqrt(
-                torch.square(tau[: -(i + 1)] - tau_mean[: -(i + 1)]).div(s).mean(0)
+                torch.square(tau_true[: -(i + 1)] - tau_mean[: -(i + 1)]).mean(0)
             ).item()
         )
         error_rate.append(
-            1 - (pi_hat[: -(i + 1)] == pi_true[: -(i + 1)]).float().mean().item()
+            (pi_hat[: -(i + 1)] != pi_true[: -(i + 1)]).float().sum().item() / n
         )
     results["sweep"]["epistemic"]["pehe"].append(pehe)
     results["sweep"]["epistemic"]["error_rate"].append(error_rate)
@@ -738,31 +739,51 @@ def update_epistemic(results, intervals, tau_true, pi_true):
 
 
 def update_sensitivity(results, intervals, tau_true, pi_true):
+    n = len(tau_true)
     pehe = []
     error_rate = []
     defer_rate = []
+    tau_hat = intervals["0.0"]
+    tau_mean = tau_hat["mean"].mean(0)
+    pi_hat = tau_mean > 0.0
+    defer_rate.append(0.0)
+    pehe.append(torch.sqrt(torch.square(tau_true - tau_mean).mean(0)).item())
+    error_rate.append(1 - (pi_hat == pi_true).float().mean().item())
+    deferred = []
     for k in intervals.keys():
         tau_hat = intervals[k]
         tau_mean = tau_hat["mean"].mean(0)
-        s = torch.cat([tau_mean, tau_true]).var()
         tau_top = tau_hat["top"].mean(0)
         tau_bottom = tau_hat["bottom"].mean(0)
         defer = (tau_top >= 0) * (tau_bottom <= 0)
-        keep = ~defer
+        new_deferrals = list(set(np.where(defer)[0]).difference(set(deferred)))
+        rank = torch.min(
+            torch.abs(torch.cat([tau_top.unsqueeze(0), tau_bottom.unsqueeze(0)])), dim=0
+        )[0]
+        if len(new_deferrals) > 0:
+            for idx in np.argsort(-rank[new_deferrals]):
+                deferred.append(new_deferrals[idx])
+                defer_rate.append(len(deferred) / n)
+                keep = torch.ones_like(tau_true, dtype=torch.bool)
+                keep[deferred] = False
+                pehe.append(
+                    torch.sqrt(
+                        torch.square(tau_true[keep] - tau_mean[keep]).mean(0)
+                    ).item()
+                )
+                error_rate.append((pi_hat[keep] != pi_true[keep]).sum().item() / n)
         pi_hat = tau_bottom > 0.0
-        if k == "1.0":
-            error_rate.append(1 - (pi_hat == pi_true).float().mean().item())
+    new_deferrals = list(set(set(range(n))).difference(set(deferred)))
+    if len(new_deferrals) > 0:
+        for idx in np.argsort(rank[new_deferrals]):
+            deferred.append(new_deferrals[idx])
+            defer_rate.append(len(deferred) / n)
+            keep = torch.ones_like(tau_true, dtype=torch.bool)
+            keep[deferred] = False
             pehe.append(
-                torch.sqrt(torch.square(tau_mean - tau_true).div(s).mean()).item()
+                torch.sqrt(torch.square(tau_true[keep] - tau_mean[keep]).mean(0)).item()
             )
-            defer_rate.append(0.0)
-        error_rate.append(1 - (pi_hat[keep] == pi_true[keep]).float().mean().item())
-        pehe.append(
-            torch.sqrt(
-                torch.square(tau_mean[keep] - tau_true[keep]).div(s).mean()
-            ).item()
-        )
-        defer_rate.append(defer.float().mean().item())
+            error_rate.append((pi_hat[keep] != pi_true[keep]).sum().item() / n)
     results["sweep"]["sensitivity"]["pehe"].append(pehe)
     results["sweep"]["sensitivity"]["error_rate"].append(error_rate)
     results["sweep"]["sensitivity"]["defer_rate"].append(defer_rate)
@@ -771,24 +792,18 @@ def update_sensitivity(results, intervals, tau_true, pi_true):
 def interpolate_values(deferral_rate, error_rate):
     means = []
     cis = []
-    quantized = np.round(deferral_rate, 1)
-    for i in DEFERRAL_RATES:
-        binned = error_rate[quantized == i]
-        means.append(binned.mean())
-        se = stats.sem(binned)
-        cis.append(se * stats.t.ppf((1 + 0.95) / 2.0, 200 - 1))
-    return np.asarray(means) + 1e-3, np.asarray(cis)
+    for i in range(len(deferral_rate)):
+        means.append(error_rate[i, :].mean())
+        se = stats.sem(error_rate[i, :])
+        cis.append(se)
+    return np.asarray(means), np.asarray(cis)
 
 
 def update_summaries(
     summary, dataset, intervals, pi_true, epistemic_uncertainty=False, lt=True
 ):
     risk = float(
-        utils.policy_risk(
-            pi=pi_true,
-            y1=dataset.y1.ravel(),
-            y0=dataset.y0.ravel(),
-        )
+        utils.policy_risk(pi=pi_true, y1=dataset.y1.ravel(), y0=dataset.y0.ravel(),)
     )
     summary["policy_risk"]["risk"]["true"].append(risk)
     for k in GAMMAS.keys():
@@ -808,14 +823,14 @@ def update_summaries(
 def policy(tau_hat, epistemic_uncertainty, lt=True):
     if lt:
         tau_top = (
-            tau_hat["top"].mean(0) + np.nan_to_num(2 * tau_hat["top"].std(0))
+            tau_hat["top"].mean(0) + 2 * tau_hat["mean"].std(0)
             if epistemic_uncertainty
             else tau_hat["top"].mean(0)
         )
         pi = (tau_top < 0).float()
     else:
         tau_bottom = (
-            tau_hat["bottom"].mean(0) + np.nan_to_num(2 * tau_hat["bottom"].std(0))
+            tau_hat["bottom"].mean(0) - 2 * tau_hat["mean"].std(0)
             if epistemic_uncertainty
             else tau_hat["bottom"].mean(0)
         )
@@ -824,20 +839,31 @@ def policy(tau_hat, epistemic_uncertainty, lt=True):
 
 
 GAMMAS = {
-    "0.00": math.exp(0.00),
-    "0.25": math.exp(0.25),
-    "0.50": math.exp(0.50),
-    "0.75": math.exp(0.75),
-    "1.00": math.exp(1.00),
-    "1.25": math.exp(1.25),
-    "1.50": math.exp(1.50),
-    "1.75": math.exp(1.75),
-    "2.00": math.exp(2.00),
-    "2.50": math.exp(2.50),
-    "3.00": math.exp(3.00),
-    "3.50": math.exp(3.50),
-    "4.00": math.exp(4.00),
-    "4.60": math.exp(4.60),
+    "0.0": math.exp(0.0),
+    "0.1": math.exp(0.1),
+    "0.2": math.exp(0.2),
+    "0.5": math.exp(0.5),
+    "0.7": math.exp(0.7),
+    "1.0": math.exp(1.0),
+    "1.2": math.exp(1.2),
+    "1.5": math.exp(1.5),
+    "2.0": math.exp(2.0),
+    "2.5": math.exp(2.5),
+    "3.0": math.exp(3.0),
+    "3.5": math.exp(3.5),
+    "4.0": math.exp(4.0),
+    "4.5": math.exp(4.5),
+    "5.0": math.exp(5.0),
+    "5.5": math.exp(5.5),
+    "6.0": math.exp(6.0),
+    "6.5": math.exp(6.5),
+    "7.0": math.exp(7.0),
+    "7.5": math.exp(7.5),
+    "8.0": math.exp(8.0),
+    "8.5": math.exp(8.5),
+    "9.0": math.exp(9.0),
+    "9.5": math.exp(9.5),
+    "10.": math.exp(10.0),
 }
 
 DEFERRAL_RATES = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]

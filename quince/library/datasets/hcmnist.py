@@ -24,7 +24,7 @@ class HCMNIST(datasets.MNIST):
         seed: int = 1331,
         transform: typing.Optional[typing.Callable] = None,
         target_transform: typing.Optional[typing.Callable] = None,
-        download: bool = False,
+        download: bool = True,
     ) -> None:
         train = split == "train" or split == "valid"
         super(HCMNIST, self).__init__(

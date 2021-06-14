@@ -6,10 +6,7 @@ from quince.library import datasets
 
 
 def ensemble_trainer(
-    config,
-    experiment_dir,
-    trial,
-    ensemble_id,
+    config, experiment_dir, trial, ensemble_id,
 ):
     dataset_name = config.get("dataset_name")
     config["ds_train"]["seed"] = trial
@@ -30,7 +27,7 @@ def ensemble_trainer(
 
     experiment_dir = (
         Path(experiment_dir)
-        / "density-network"
+        / "ensemble"
         / f"dh-{dim_hidden}_nc-{dim_output}_dp-{depth}_ns-{negative_slope}_dr-{dropout_rate}_sn-{spectral_norm}_lr-{learning_rate}_bs-{batch_size}_ep-{epochs}"
         / f"trial-{trial:03d}"
     )
@@ -41,7 +38,7 @@ def ensemble_trainer(
 
     out_dir = experiment_dir / "checkpoints" / f"model-{ensemble_id}" / "mu"
     if not (out_dir / "best_checkpoint.pt").exists():
-        outcome_model = models.TARNet(
+        outcome_model = models.DragonNet(
             job_dir=out_dir,
             architecture="resnet",
             dim_input=ds_train.dim_input,
@@ -52,7 +49,7 @@ def ensemble_trainer(
             batch_norm=False,
             spectral_norm=spectral_norm,
             dropout_rate=dropout_rate,
-            weight_decay=(0.5 * (1 - dropout_rate)) / len(ds_train),
+            num_examples=len(ds_train),
             learning_rate=learning_rate,
             batch_size=batch_size,
             epochs=epochs,
@@ -61,34 +58,4 @@ def ensemble_trainer(
             seed=ensemble_id,
         )
         _ = outcome_model.fit(ds_train, ds_valid)
-
-    ds_train_config = config.get("ds_train")
-    ds_train_config["mode"] = "pi"
-    ds_train = datasets.DATASETS.get(dataset_name)(**ds_train_config)
-    ds_valid_config = config.get("ds_valid")
-    ds_valid_config["mode"] = "pi"
-    ds_valid = datasets.DATASETS.get(dataset_name)(**ds_valid_config)
-
-    out_dir = experiment_dir / "checkpoints" / f"model-{ensemble_id}" / "pi"
-    if not (out_dir / "best_checkpoint.pt").exists():
-        propensity_model = models.NeuralNetwork(
-            job_dir=out_dir,
-            architecture="resnet",
-            dim_input=ds_train.dim_input,
-            dim_hidden=dim_hidden,
-            dim_output=ds_train.dim_treatment,
-            depth=depth,
-            negative_slope=negative_slope,
-            batch_norm=False,
-            spectral_norm=spectral_norm,
-            dropout_rate=dropout_rate,
-            weight_decay=(0.5 * (1 - dropout_rate)) / len(ds_train),
-            learning_rate=learning_rate,
-            batch_size=batch_size,
-            epochs=epochs,
-            patience=10,
-            num_workers=0,
-            seed=ensemble_id,
-        )
-        _ = propensity_model.fit(ds_train, ds_valid)
     return -1
