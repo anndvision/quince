@@ -2,6 +2,8 @@ import torch
 import typing
 import numpy as np
 
+from pathlib import Path
+
 from torchvision import datasets
 
 from sklearn import model_selection
@@ -13,11 +15,11 @@ class HCMNIST(datasets.MNIST):
     def __init__(
         self,
         root: str,
-        lambda_star: float,
+        gamma_star: float,
         split: str = "train",
         mode: str = "mu",
         p_u: str = "bernoulli",
-        gamma: float = 4.0,
+        theta: float = 4.0,
         beta: float = 0.75,
         sigma_y: float = 1.0,
         domain: float = 2.0,
@@ -27,6 +29,8 @@ class HCMNIST(datasets.MNIST):
         download: bool = True,
     ) -> None:
         train = split == "train" or split == "valid"
+        root = Path.home() / "quince_datasets" if root is None else Path(root)
+        self.__class__.__name__ = "MNIST"
         super(HCMNIST, self).__init__(
             root,
             train=train,
@@ -55,8 +59,7 @@ class HCMNIST(datasets.MNIST):
         self.dim_output = 1
 
         self.phi_model = fit_phi_model(
-            root=root,
-            edges=torch.arange(-domain, domain + 0.1, (2 * domain) / 10),
+            root=root, edges=torch.arange(-domain, domain + 0.1, (2 * domain) / 10),
         )
 
         size = (self.__len__(), 1)
@@ -74,17 +77,17 @@ class HCMNIST(datasets.MNIST):
 
         phi = self.phi
         self.pi = (
-            utils.complete_propensity(x=phi, u=self.u, lambda_=lambda_star, beta=beta)
+            utils.complete_propensity(x=phi, u=self.u, gamma=gamma_star, beta=beta)
             .astype("float32")
             .ravel()
         )
         self.t = rng.binomial(1, self.pi).astype("float32")
         eps = (sigma_y * rng.normal(size=self.t.shape)).astype("float32")
         self.mu0 = (
-            utils.f_mu(x=phi, t=0.0, u=self.u, gamma=gamma).astype("float32").ravel()
+            utils.f_mu(x=phi, t=0.0, u=self.u, theta=theta).astype("float32").ravel()
         )
         self.mu1 = (
-            utils.f_mu(x=phi, t=1.0, u=self.u, gamma=gamma).astype("float32").ravel()
+            utils.f_mu(x=phi, t=1.0, u=self.u, theta=theta).astype("float32").ravel()
         )
         self.y0 = self.mu0 + eps
         self.y1 = self.mu1 + eps

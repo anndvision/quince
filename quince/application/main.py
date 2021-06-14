@@ -173,16 +173,19 @@ def ihdp(
 @cli.command("hcmnist")
 @click.pass_context
 @click.option(
-    "--root", type=str, required=True, help="location of dataset",
+    "--root",
+    type=str,
+    default=None,
+    help="location of dataset, default=~/quince_datasets/",
 )
 @click.option(
-    "--lambda-star",
+    "--gamma-star",
     default=math.exp(1.0),
     type=float,
     help="Ground truth level of hidden confounding, default=2.7",
 )
 @click.option(
-    "--gamma",
+    "--theta",
     default=4.0,
     type=float,
     help="Coefficient for u effect on y, default=4.0",
@@ -206,14 +209,14 @@ def ihdp(
     help="Domain of x is [-domain_limit, domain_limit], default=2.5",
 )
 def hcmnist(
-    context, root, lambda_star, gamma, beta, sigma, domain_limit,
+    context, root, gamma_star, theta, beta, sigma, domain_limit,
 ):
     job_dir = Path(context.obj.get("job_dir"))
     dataset_name = "hcmnist"
     experiment_dir = (
         job_dir
         / dataset_name
-        / f"ls-{lambda_star:.02f}_ga-{gamma:.02f}_be-{beta:.02f}_si-{sigma:.02f}_dl-{domain_limit:.02f}"
+        / f"gs-{gamma_star:.02f}_th-{theta:.02f}_be-{beta:.02f}_si-{sigma:.02f}_dl-{domain_limit:.02f}"
     )
     context.obj.update(
         {
@@ -221,9 +224,9 @@ def hcmnist(
             "experiment_dir": str(experiment_dir),
             "ds_train": {
                 "root": root,
-                "lambda_star": lambda_star,
+                "gamma_star": gamma_star,
                 "split": "train",
-                "gamma": gamma,
+                "theta": theta,
                 "beta": beta,
                 "mode": "mu",
                 "p_u": "bernoulli",
@@ -233,9 +236,9 @@ def hcmnist(
             },
             "ds_valid": {
                 "root": root,
-                "lambda_star": lambda_star,
+                "gamma_star": gamma_star,
                 "split": "valid",
-                "gamma": gamma,
+                "theta": theta,
                 "beta": beta,
                 "mode": "mu",
                 "p_u": "bernoulli",
@@ -245,9 +248,9 @@ def hcmnist(
             },
             "ds_test": {
                 "root": root,
-                "lambda_star": lambda_star,
+                "gamma_star": gamma_star,
                 "split": "test",
-                "gamma": gamma,
+                "theta": theta,
                 "beta": beta,
                 "mode": "mu",
                 "p_u": "bernoulli",
@@ -268,13 +271,13 @@ def hcmnist(
     help="number of training examples, defaul=1000",
 )
 @click.option(
-    "--lambda-star",
+    "--gamma-star",
     default=math.exp(1.0),
     type=float,
     help="Ground truth level of hidden confounding, default=2.7",
 )
 @click.option(
-    "--gamma",
+    "--theta",
     default=4.0,
     type=float,
     help="Coefficient for u effect on y, default=4.0",
@@ -298,14 +301,14 @@ def hcmnist(
     help="Domain of x is [-domain_limit, domain_limit], default=2.5",
 )
 def synthetic(
-    context, num_examples, lambda_star, gamma, beta, sigma, domain_limit,
+    context, num_examples, gamma_star, theta, beta, sigma, domain_limit,
 ):
     job_dir = Path(context.obj.get("job_dir"))
     dataset_name = "synthetic"
     experiment_dir = (
         job_dir
         / dataset_name
-        / f"ne-{num_examples}_ls-{lambda_star:.02f}_ga-{gamma:.02f}_be-{beta:.02f}_si-{sigma:.02f}_dl-{domain_limit:.02f}"
+        / f"ne-{num_examples}_gs-{gamma_star:.02f}_th-{theta:.02f}_be-{beta:.02f}_si-{sigma:.02f}_dl-{domain_limit:.02f}"
     )
     context.obj.update(
         {
@@ -313,8 +316,8 @@ def synthetic(
             "experiment_dir": str(experiment_dir),
             "ds_train": {
                 "num_examples": num_examples,
-                "lambda_star": lambda_star,
-                "gamma": gamma,
+                "gamma_star": gamma_star,
+                "theta": theta,
                 "beta": beta,
                 "mode": "mu",
                 "p_u": "bernoulli",
@@ -324,8 +327,8 @@ def synthetic(
             },
             "ds_valid": {
                 "num_examples": num_examples // 10,
-                "lambda_star": lambda_star,
-                "gamma": gamma,
+                "gamma_star": gamma_star,
+                "theta": theta,
                 "beta": beta,
                 "mode": "mu",
                 "p_u": "bernoulli",
@@ -335,8 +338,8 @@ def synthetic(
             },
             "ds_test": {
                 "num_examples": min(num_examples, 2000),
-                "lambda_star": lambda_star,
-                "gamma": gamma,
+                "gamma_star": gamma_star,
+                "theta": theta,
                 "beta": beta,
                 "mode": "mu",
                 "p_u": "bernoulli",
