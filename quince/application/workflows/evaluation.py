@@ -211,6 +211,7 @@ def plot_deferral(experiment_dir):
         sensitivity=sensitivity,
         sensitivity_kernel=sensitivity_kernel,
         mode="error_rate",
+        output_dir=experiment_dir,
     )
     plot_sweep(
         ignorance=ignorance,
@@ -218,6 +219,7 @@ def plot_deferral(experiment_dir):
         sensitivity=sensitivity,
         sensitivity_kernel=sensitivity_kernel,
         mode="pehe",
+        output_dir=experiment_dir,
     )
 
 
@@ -604,7 +606,9 @@ def plot_fillbetween_mnist(intervals, ds_train, ds_test, output_dir):
         )
 
 
-def plot_sweep(ignorance, sensitivity, epistemic, mode, sensitivity_kernel=None):
+def plot_sweep(
+    ignorance, sensitivity, epistemic, mode, output_dir, sensitivity_kernel=None
+):
     means_ig, cis_ig = interpolate_values(ignorance["defer_rate"], ignorance[mode])
     means_se, cis_se = interpolate_values(sensitivity["defer_rate"], sensitivity[mode])
     means_ep, cis_ep = interpolate_values(epistemic["defer_rate"], epistemic[mode])
@@ -653,7 +657,7 @@ def plot_sweep(ignorance, sensitivity, epistemic, mode, sensitivity_kernel=None)
         x_pad=-20,
         y_pad=-45,
         legend_loc="upper right",
-        file_path=Path("experiments") / f"{mode}.png",
+        file_path=Path(output_dir) / f"{mode}.png",
     )
 
 

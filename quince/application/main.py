@@ -37,20 +37,11 @@ def cli(context):
 )
 @click.option("--verbose", default=False, type=bool, help="verbosity default=False")
 @click.option(
-    "--seed",
-    default=1331,
-    type=int,
-    help="random number generator seed, default=1331",
+    "--seed", default=1331, type=int, help="random number generator seed, default=1331",
 )
 @click.pass_context
 def train(
-    context,
-    job_dir,
-    num_trials,
-    gpu_per_trial,
-    cpu_per_trial,
-    verbose,
-    seed,
+    context, job_dir, num_trials, gpu_per_trial, cpu_per_trial, verbose, seed,
 ):
     ray.init(
         num_gpus=context.obj["n_gpu"],
@@ -97,19 +88,11 @@ def train(
     help="number of cpus for each trial, default=1",
 )
 @click.option(
-    "--seed",
-    default=1331,
-    type=int,
-    help="random number generator seed, default=1331",
+    "--seed", default=1331, type=int, help="random number generator seed, default=1331",
 )
 @click.pass_context
 def tune(
-    context,
-    job_dir,
-    max_samples,
-    gpu_per_trial,
-    cpu_per_trial,
-    seed,
+    context, job_dir, max_samples, gpu_per_trial, cpu_per_trial, seed,
 ):
     ray.init(
         num_gpus=context.obj["n_gpu"],
@@ -134,8 +117,8 @@ def tune(
 @click.option(
     "--root",
     type=str,
-    required=True,
-    help="location of dataset",
+    default=None,
+    help="location of dataset, default=~/quince_datasets/",
 )
 @click.option(
     "--hidden-confounding",
@@ -150,10 +133,7 @@ def tune(
     help="Coefficient value for hidden confounder, random if None, default=None",
 )
 def ihdp(
-    context,
-    root,
-    hidden_confounding,
-    beta_u,
+    context, root, hidden_confounding, beta_u,
 ):
     job_dir = Path(context.obj.get("job_dir"))
     dataset_name = "ihdp"
@@ -193,10 +173,7 @@ def ihdp(
 @cli.command("hcmnist")
 @click.pass_context
 @click.option(
-    "--root",
-    type=str,
-    required=True,
-    help="location of dataset",
+    "--root", type=str, required=True, help="location of dataset",
 )
 @click.option(
     "--lambda-star",
@@ -229,13 +206,7 @@ def ihdp(
     help="Domain of x is [-domain_limit, domain_limit], default=2.5",
 )
 def hcmnist(
-    context,
-    root,
-    lambda_star,
-    gamma,
-    beta,
-    sigma,
-    domain_limit,
+    context, root, lambda_star, gamma, beta, sigma, domain_limit,
 ):
     job_dir = Path(context.obj.get("job_dir"))
     dataset_name = "hcmnist"
@@ -327,13 +298,7 @@ def hcmnist(
     help="Domain of x is [-domain_limit, domain_limit], default=2.5",
 )
 def synthetic(
-    context,
-    num_examples,
-    lambda_star,
-    gamma,
-    beta,
-    sigma,
-    domain_limit,
+    context, num_examples, lambda_star, gamma, beta, sigma, domain_limit,
 ):
     job_dir = Path(context.obj.get("job_dir"))
     dataset_name = "synthetic"
@@ -439,10 +404,7 @@ def ensemble(
 ):
     if context.obj["tune"]:
         context.obj.update(
-            {
-                "epochs": epochs,
-                "ensemble_size": ensemble_size,
-            }
+            {"epochs": epochs, "ensemble_size": ensemble_size,}
         )
         workflows.tuning.hyper_tune(config=context.obj)
     else:
@@ -499,16 +461,11 @@ def ensemble(
 )
 @click.pass_context
 def evaluate(
-    context,
-    experiment_dir,
-    output_dir,
+    context, experiment_dir, output_dir,
 ):
     output_dir = experiment_dir if output_dir is None else output_dir
     context.obj.update(
-        {
-            "experiment_dir": experiment_dir,
-            "output_dir": output_dir,
-        }
+        {"experiment_dir": experiment_dir, "output_dir": output_dir,}
     )
 
 
@@ -534,10 +491,7 @@ def evaluate(
 )
 @click.pass_context
 def compute_intervals(
-    context,
-    mc_samples,
-    gpu_per_trial,
-    cpu_per_trial,
+    context, mc_samples, gpu_per_trial, cpu_per_trial,
 ):
     ray.init(
         num_gpus=context.obj["n_gpu"],
@@ -546,8 +500,7 @@ def compute_intervals(
     )
 
     @ray.remote(
-        num_gpus=gpu_per_trial,
-        num_cpus=cpu_per_trial,
+        num_gpus=gpu_per_trial, num_cpus=cpu_per_trial,
     )
     def evaluator(**kwargs):
         func = workflows.evaluation.compute_intervals_ensemble(**kwargs)
@@ -577,9 +530,7 @@ def compute_intervals(
 )
 @click.pass_context
 def compute_intervals_kernel(
-    context,
-    gpu_per_trial,
-    cpu_per_trial,
+    context, gpu_per_trial, cpu_per_trial,
 ):
     ray.init(
         num_gpus=context.obj["n_gpu"],
@@ -588,8 +539,7 @@ def compute_intervals_kernel(
     )
 
     @ray.remote(
-        num_gpus=gpu_per_trial,
-        num_cpus=cpu_per_trial,
+        num_gpus=gpu_per_trial, num_cpus=cpu_per_trial,
     )
     def evaluator(**kwargs):
         func = workflows.evaluation.compute_intervals_kernel(**kwargs)
@@ -606,46 +556,35 @@ def compute_intervals_kernel(
 
 @cli.command("print-summary")
 @click.pass_context
-def print_summary(
-    context,
-):
+def print_summary(context,):
     experiment_dir = Path(context.obj.get("experiment_dir"))
     workflows.evaluation.print_summary(experiment_dir=experiment_dir, kernel=False)
 
 
 @cli.command("paired-t-test")
 @click.pass_context
-def paired_t_test(
-    context,
-):
+def paired_t_test(context,):
     experiment_dir = Path(context.obj.get("experiment_dir"))
     workflows.evaluation.paired_t_test(experiment_dir=experiment_dir)
 
 
 @cli.command("print-summary-kernel")
 @click.pass_context
-def print_summary(
-    context,
-):
+def print_summary(context,):
     experiment_dir = Path(context.obj.get("experiment_dir"))
     workflows.evaluation.print_summary(experiment_dir=experiment_dir, kernel=True)
 
 
 @cli.command("plot-deferral")
 @click.pass_context
-def plot_deferral(
-    context,
-):
+def plot_deferral(context,):
     experiment_dir = Path(context.obj.get("experiment_dir"))
     workflows.evaluation.plot_deferral(experiment_dir=experiment_dir)
 
 
 @cli.command("plot-ignorance")
 @click.option(
-    "--trial",
-    default=0,
-    type=int,
-    help="trial, default=0",
+    "--trial", default=0, type=int, help="trial, default=0",
 )
 @click.pass_context
 def plot_ignorance(context, trial):
@@ -655,10 +594,7 @@ def plot_ignorance(context, trial):
 
 @cli.command("plot-errorbars")
 @click.option(
-    "--trial",
-    default=0,
-    type=int,
-    help="trial, default=0",
+    "--trial", default=0, type=int, help="trial, default=0",
 )
 @click.pass_context
 def plot_errorbars(context, trial):
@@ -668,10 +604,7 @@ def plot_errorbars(context, trial):
 
 @cli.command("plot-errorbars-kernel")
 @click.option(
-    "--trial",
-    default=0,
-    type=int,
-    help="trial, default=0",
+    "--trial", default=0, type=int, help="trial, default=0",
 )
 @click.pass_context
 def plot_errorbars(context, trial):

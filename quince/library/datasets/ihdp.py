@@ -1,5 +1,6 @@
 import torch
 import pyreadr
+import requests
 import numpy as np
 
 from pathlib import Path
@@ -46,9 +47,17 @@ _HIDDEN_COVARIATE = [
 
 class IHDP(data.Dataset):
     def __init__(self, root, split, mode, seed, hidden_confounding, beta_u=None):
-
-        root = Path(root)
-        df = pyreadr.read_r(str(root / "ihdp.RData"))["ihdp"]
+        root = Path.home() / "quince_datasets" if root is None else Path(root)
+        data_path = root / "ihdp.RData"
+        # Download data if necessary
+        if not data_path.exists():
+            root.mkdir(parents=True, exist_ok=True)
+            r = requests.get(
+                "https://github.com/vdorie/npci/raw/master/examples/ihdp_sim/data/ihdp.RData"
+            )
+            with open(data_path, "wb") as f:
+                f.write(r.content)
+        df = pyreadr.read_r(data_path)["ihdp"]
         # Make observational as per Hill 2011
         df = df[~((df["treat"] == 1) & (df["momwhite"] == 0))]
         df = df[

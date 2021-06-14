@@ -26,22 +26,20 @@ $ quince \
         --max-samples 500 \
         --gpu-per-trial 0.2 \
     ihdp \
-        --root /path/to/quince-repo/assets/ \
     ensemble
 ```
 
 ### Step 2: Train ensembles over a number of trials
 
-Here, we use the `train` function to fit an ensemble of `mixture-density-network`s on 1000 realizations of the `ihdp` with hidden confounding dataset.
+Here, we use the `train` function to fit an `ensemble` of mixture density networks on 10 realizations of the `ihdp` with hidden confounding dataset. For the full results change `--num-trials 1000`
 
 ```.bash
 $ quince \
     train \
         --job-dir ~/experiments/quince/ \
-        --num-trials 1000 \
+        --num-trials 10 \
         --gpu-per-trial 0.2 \
     ihdp \
-        --root /path/to/quince-repo/assets/ \
     ensemble \
         --dim-hidden 200 \
         --num-components 5 \
@@ -58,11 +56,18 @@ $ quince \
 
 ### Step 3: Evaluate
 
+Plots will be written to the `experiment-dir`
 ```.bash
 $ quince \
     evaluate \
         --experiment-dir ~/experiments/quince/ihdp/hc-True_beta-None/ensemble/dh-200_nc-5_dp-4_ns-0.3_dr-0.5_sn-6.0_lr-0.0005_bs-200_ep-500/ \
-        --mc-samples 100 \
+    compute-intervals \
+        --gpu-per-trial 0.2 \
+    compute-intervals-kernel \
+        --gpu-per-trial 0.2 \
+    plot-deferral \
+    plot-errorbars \
+        --trial 0
 ```
 
 ## :pear: Replicating Other Results
