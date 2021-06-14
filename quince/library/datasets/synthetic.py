@@ -9,10 +9,10 @@ class Synthetic(data.Dataset):
     def __init__(
         self,
         num_examples,
-        lambda_star,
+        gamma_star,
         mode,
         p_u="bernoulli",
-        gamma=4.0,
+        theta=4.0,
         beta=0.75,
         sigma_y=1.0,
         domain=2,
@@ -40,7 +40,7 @@ class Synthetic(data.Dataset):
 
         self.pi = (
             utils.complete_propensity(
-                x=self.x, u=self.u, lambda_=lambda_star, beta=beta
+                x=self.x, u=self.u, gamma=gamma_star, beta=beta
             )
             .astype("float32")
             .ravel()
@@ -48,10 +48,10 @@ class Synthetic(data.Dataset):
         self.t = rng.binomial(1, self.pi).astype("float32")
         eps = (sigma_y * rng.normal(size=self.t.shape)).astype("float32")
         self.mu0 = (
-            utils.f_mu(x=self.x, t=0.0, u=self.u, gamma=gamma).astype("float32").ravel()
+            utils.f_mu(x=self.x, t=0.0, u=self.u, theta=theta).astype("float32").ravel()
         )
         self.mu1 = (
-            utils.f_mu(x=self.x, t=1.0, u=self.u, gamma=gamma).astype("float32").ravel()
+            utils.f_mu(x=self.x, t=1.0, u=self.u, theta=theta).astype("float32").ravel()
         )
         self.y0 = self.mu0 + eps
         self.y1 = self.mu1 + eps
@@ -77,6 +77,6 @@ class Synthetic(data.Dataset):
         return self.inputs[index], self.targets[index : index + 1]
 
     def tau_fn(self, x):
-        return utils.f_mu(x=x, t=1.0, u=1.0, gamma=0.0) - utils.f_mu(
-            x=x, t=0.0, u=1.0, gamma=0.0
+        return utils.f_mu(x=x, t=1.0, u=1.0, theta=0.0) - utils.f_mu(
+            x=x, t=0.0, u=1.0, theta=0.0
         )

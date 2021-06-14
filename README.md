@@ -1,4 +1,4 @@
-# quince :pear:
+# :pear: quince 
 
 Code for [Quantifying Ignorance in Individual-Level Causal-Effect Estimates under Hidden Confounding](https://arxiv.org/abs/2103.04850)
 
@@ -57,6 +57,7 @@ $ quince \
 ### Step 3: Evaluate
 
 Plots will be written to the `experiment-dir`
+
 ```.bash
 $ quince \
     evaluate \
@@ -81,7 +82,7 @@ $ quince \
         --num-trials 50 \
         --gpu-per-trial 0.2 \
     synthetic \
-        --lambda-star 1.65
+        --gamma-star 1.65 \
     ensemble \
         --dim-hidden 200 \
         --num-components 5 \
@@ -99,11 +100,18 @@ $ quince \
 ```.bash
 $ quince \
     evaluate \
-        --experiment-dir ~/experiments/quince/synthetic/ne-1000_ls-1.65_ga-4.00_be-0.75_si-1.00_dl-2.00/ensemble/dh-200_nc-5_dp-4_ns-0.0_dr-0.1_sn-6.0_lr-0.001_bs-32_ep-500/ \
-        --mc-samples 100 \
+        --experiment-dir ~/experiments/quince/synthetic/ne-1000_gs-1.65_th-4.00_be-0.75_si-1.00_dl-2.00/ensemble/dh-200_nc-5_dp-4_ns-0.0_dr-0.1_sn-6.0_lr-0.001_bs-32_ep-500/ \
+    compute-intervals \
+        --gpu-per-trial 0.2 \
+    compute-intervals-kernel \
+        --gpu-per-trial 0.2 \
+    plot-ignorance \
+    print-summary \
+    print-summary-kernel \
+    paired-t-test
 ```
 
-Repeat the above for `--lambda-star 2.72` and `--lambda-star 4.48`.
+Repeat the above for `--gamma-star 2.72` and `--gamma-star 4.48`.
 
 ### HCMNIST
 
@@ -114,8 +122,7 @@ $ quince \
         --num-trials 20 \
         --gpu-per-trial 0.5 \
     hcmnist \
-        --root ~/data
-        --lambda-star 1.65
+        --gamma-star 1.65 \
     ensemble \
         --dim-hidden 200 \
         --num-components 5 \
@@ -133,8 +140,10 @@ $ quince \
 ```.bash
 $ quince \
     evaluate \
-        --experiment-dir ~/experiments/quince/hcmnist/ls-1.65_ga-4.00_be-0.75_si-1.00_dl-2.00/ensemble/dh-200_nc-5_dp-2_ns-0.0_dr-0.15_sn-3.0_lr-0.0005_bs-200_ep-500/ \
-        --mc-samples 100 \
+        --experiment-dir ~/experiments/quince/hcmnist/gs-1.65_th-4.00_be-0.75_si-1.00_dl-2.00/ensemble/dh-200_nc-5_dp-2_ns-0.0_dr-0.15_sn-3.0_lr-0.0005_bs-200_ep-500/ \
+    compute-intervals \
+        --gpu-per-trial 1.0 \
+    print-summary
 ```
 
-Repeat the above for `--lambda-star 2.72` and `--lambda-star 4.48`.
+Repeat the above for `--gamma-star 2.72` and `--gamma-star 4.48`.
