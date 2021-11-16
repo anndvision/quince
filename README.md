@@ -13,6 +13,11 @@ $ conda env create -f environment.yml
 $ conda activate quince
 ```
 
+[Optional] For developer mode
+```.sh
+$ pip install -e .
+```
+
 ## :pear: Example: Replicating IHDP results
 
 ### Step 1: Hyperparameter Tuning (optional)
@@ -147,3 +152,26 @@ $ quince \
 ```
 
 Repeat the above for `--gamma-star 2.72` and `--gamma-star 4.48`.
+
+## Citation
+
+If you find this code helpful for your work, please cite our paper
+[Paper](http://proceedings.mlr.press/v139/jesson21a.html) as
+
+```bibtex
+@InProceedings{jesson2021quantifying,
+  title={Quantifying Ignorance in Individual-Level Causal-Effect Estimates under Hidden Confounding},
+  author={Jesson, Andrew and Mindermann, S{\"o}ren and Gal, Yarin and Shalit, Uri},
+  booktitle={Proceedings of the 38th International Conference on Machine Learning},
+  pages={4829--4838},
+  year={2021},
+  editor={Meila, Marina and Zhang, Tong},
+  volume={139},
+  series={Proceedings of Machine Learning Research},
+  month={18--24 Jul},
+  publisher={PMLR},
+  pdf={http://proceedings.mlr.press/v139/jesson21a/jesson21a.pdf},
+  url={https://proceedings.mlr.press/v139/jesson21a.html},
+  abstract={We study the problem of learning conditional average treatment effects (CATE) from high-dimensional, observational data with unobserved confounders. Unobserved confounders introduce ignorance—a level of unidentifiability—about an individual’s response to treatment by inducing bias in CATE estimates. We present a new parametric interval estimator suited for high-dimensional data, that estimates a range of possible CATE values when given a predefined bound on the level of hidden confounding. Further, previous interval estimators do not account for ignorance about the CATE associated with samples that may be underrepresented in the original study, or samples that violate the overlap assumption. Our interval estimator also incorporates model uncertainty so that practitioners can be made aware of such out-of-distribution data. We prove that our estimator converges to tight bounds on CATE when there may be unobserved confounding and assess it using semi-synthetic, high-dimensional datasets.}
+}
+```
