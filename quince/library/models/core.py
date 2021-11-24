@@ -116,20 +116,13 @@ class PyTorchModel(BaseModel):
         train_loader = data.DataLoader(
             train_dataset,
             batch_size=self.batch_size,
-            sampler=datasets.RandomFixedLengthSampler(
-                train_dataset,
-                10000,
-            )
-            if self.num_examples < 10000
-            else None,
+            sampler=None,
             drop_last=True,
             pin_memory=True,
             num_workers=self.num_workers,
         )
         tune_loader = data.DataLoader(
-            tune_dataset,
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
+            tune_dataset, batch_size=self.batch_size, num_workers=self.num_workers,
         )
         # Instantiate trainer
         for k, v in self.metrics.items():

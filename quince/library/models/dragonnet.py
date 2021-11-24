@@ -1,11 +1,12 @@
 import torch
 
-from ignite import metrics
-
 from torch import optim
+
+from ignite import metrics
 
 from quince.library.models import core
 from quince.library.modules import dragonnet
+from quince.library.metrics import regression
 
 
 class DragonNet(core.PyTorchModel):
@@ -50,13 +51,23 @@ class DragonNet(core.PyTorchModel):
             spectral_norm=spectral_norm,
         )
         self.metrics = {
-            "loss": metrics.Average(
+            "loss": regression.NegR2Score(
+                dim_output=dim_output,
+                output_transform=lambda x: (x["outputs"][0].mean, x["targets"],),
+                device=self.device,
+            ),
+            "loss_y": metrics.Average(
                 output_transform=lambda x: -x["outputs"][0]
                 .log_prob(x["targets"])
-                .mean()
-                - x["outputs"][1].log_prob(x["treatments"]).mean(),
+                .mean(),
                 device=self.device,
-            )
+            ),
+            "loss_t": metrics.Average(
+                output_transform=lambda x: -x["outputs"][1]
+                .log_prob(x["treatments"])
+                .mean(),
+                device=self.device,
+            ),
         }
         self.batch_size = batch_size
         self.best_loss = 1e7
