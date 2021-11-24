@@ -1,6 +1,6 @@
 from ray import tune
 from ray.tune import schedulers
-from ray.tune.suggest import hyperopt
+from ray.tune.suggest import bohb
 
 from quince.library import models
 from quince.library import datasets
@@ -36,7 +36,7 @@ def tune_tarnet(config):
         learning_rate=learning_rate,
         batch_size=batch_size,
         epochs=epochs,
-        patience=5,
+        patience=500,
         num_workers=0,
         seed=config.get("seed"),
     )
@@ -45,28 +45,26 @@ def tune_tarnet(config):
 
 def hyper_tune(config):
     space = {
-        "dim_hidden": tune.choice([50, 100, 200, 400]),
+        "dim_hidden": tune.choice([50, 100, 200, 400, 800]),
         "depth": tune.choice([2, 3, 4, 5])
         if config["dataset_name"] != "hcmnist"
         else tune.choice([1, 2, 3, 4]),
-        "num_components": tune.choice([1, 2, 3, 4, 5]),
-        "negative_slope": tune.choice([0.0, 0.1, 0.2, 0.3, 0.4, 0.5, -1.0]),
+        "num_components": tune.choice([1, 2, 5, 10, 20]),
+        "negative_slope": tune.choice([0.0, 0.1, 0.2, 0.3, 0.5, -1.0]),
         "dropout_rate": tune.choice([0.0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.5]),
-        "spectral_norm": tune.choice([0.0, 0.95, 1.5, 3.0, 6.0]),
+        "spectral_norm": tune.choice([0.0, 0.95, 1.5, 3.0]),
         "learning_rate": tune.choice([2e-4, 5e-4, 1e-3]),
         "batch_size": tune.choice([16, 32, 64, 100, 200]),
     }
-    algorithm = hyperopt.HyperOptSearch(
-        space, metric="mean_loss", mode="min", n_initial_points=100,
-    )
-    scheduler = schedulers.AsyncHyperBandScheduler(
-        grace_period=100, max_t=config.get("epochs")
+    algorithm = bohb.TuneBOHB(space, metric="mean_loss", mode="min",)
+    scheduler = schedulers.HyperBandForBOHB(
+        time_attr="training_iteration", max_t=config.get("epochs"),
     )
     analysis = tune.run(
         run_or_experiment=tune_tarnet,
         metric="mean_loss",
         mode="min",
-        name="hyperopt_density_estimator",
+        name="bohb_density_estimator",
         resources_per_trial={
             "cpu": config.get("cpu_per_trial"),
             "gpu": config.get("gpu_per_trial"),
