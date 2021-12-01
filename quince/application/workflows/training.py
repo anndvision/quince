@@ -53,7 +53,7 @@ def ensemble_trainer(
             learning_rate=learning_rate,
             batch_size=batch_size,
             epochs=epochs,
-            patience=100,
+            patience=10,
             num_workers=0,
             seed=ensemble_id,
         )

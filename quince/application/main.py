@@ -500,6 +500,7 @@ def compute_intervals(
         num_gpus=context.obj["n_gpu"],
         dashboard_host="127.0.0.1",
         ignore_reinit_error=True,
+        object_store_memory=8000000000,
     )
 
     @ray.remote(
@@ -539,6 +540,7 @@ def compute_intervals_kernel(
         num_gpus=context.obj["n_gpu"],
         dashboard_host="127.0.0.1",
         ignore_reinit_error=True,
+        object_store_memory=8000000000,
     )
 
     @ray.remote(
