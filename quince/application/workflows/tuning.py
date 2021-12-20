@@ -45,16 +45,16 @@ def tune_tarnet(config):
 
 def hyper_tune(config):
     space = {
-        "dim_hidden": tune.choice([50, 100, 200, 400, 800]),
-        "depth": tune.choice([2, 3, 4, 5])
+        "dim_hidden": tune.qlograndint(128, 1024, 128),
+        "depth": tune.randint(2, 6)
         if config["dataset_name"] != "hcmnist"
-        else tune.choice([1, 2, 3, 4]),
-        "num_components": tune.choice([1, 2, 5, 10, 20]),
-        "negative_slope": tune.choice([0.0, 0.1, 0.2, 0.3, 0.5, -1.0]),
-        "dropout_rate": tune.choice([0.0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.5]),
+        else tune.randint(1, 5),
+        "num_components": tune.randint(1, 32),
+        "negative_slope": tune.quniform(0.0, 0.5, 0.01),
+        "dropout_rate": tune.quniform(0.0, 0.5, 0.01),
         "spectral_norm": tune.choice([0.0, 0.95, 1.5, 3.0]),
-        "learning_rate": tune.choice([2e-4, 5e-4, 1e-3]),
-        "batch_size": tune.choice([16, 32, 64, 100, 200]),
+        "learning_rate": tune.quniform(1e-4, 1e-3, 1e-4),
+        "batch_size": tune.qlograndint(32, 256, 32),
     }
     algorithm = bohb.TuneBOHB(space, metric="mean_loss", mode="min",)
     scheduler = schedulers.HyperBandForBOHB(
