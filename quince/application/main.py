@@ -384,7 +384,7 @@ def synthetic(
     help="number of examples to read during each training step, default=100",
 )
 @click.option(
-    "--epochs", type=int, default=500, help="number of training epochs, default=50"
+    "--epochs", type=int, default=100, help="number of training epochs, default=100"
 )
 @click.option(
     "--ensemble-size",
